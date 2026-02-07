@@ -24,7 +24,7 @@
         gwt-bin = pkgs.callPackage ./nix/package.nix { };
         standalone = pkgs.writeShellScriptBin "gwt" ''
           ${pkgs.bashInteractive}/bin/bash -i -c \
-          "source ${gwt-bin.shWrapper} && gwt"
+          "source ${gwt-bin.shWrapper} && gwt \"$@\""
         '';
       in
       {
