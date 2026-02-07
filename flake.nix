@@ -15,7 +15,7 @@
       nixpkgs,
       flake-utils,
       ...
-    }:
+    }@inputs:
     flake-utils.lib.eachDefaultSystemPassThrough (
       system:
       let
@@ -33,12 +33,5 @@
         package = standalone;
         gwt = gwt-bin;
       }
-    )
-    // flake-utils.lib.eachDefaultSystem (system: {
-      # nix build .#default -L
-      packages.default = self.default;
-
-      # nix run .#gwt -L
-      packages.gwt = self.default;
-    });
+    );
 }
