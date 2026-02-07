@@ -14,11 +14,13 @@ import (
 )
 
 func main() {
+	var preview bool
 	var rootCmd = &cobra.Command{
 		Use:   "gwt",
 		Short: "Git Worktree Manager",
-		Run:   runJump,
+		Run:   func(cmd *cobra.Command, args []string) { runJump(cmd, args, preview) },
 	}
+	rootCmd.Flags().BoolVar(&preview, "preview", false, "Show git status preview")
 
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "add [branch]",
@@ -27,12 +29,14 @@ func main() {
 		Run:   runAdd,
 	})
 
+	var removePreview bool
 	removeCmd := &cobra.Command{
 		Use:   "remove",
 		Short: "Interactively remove a worktree",
-		Run:   runRemove,
+		Run:   func(cmd *cobra.Command, args []string) { runRemove(cmd, args, removePreview) },
 	}
 	removeCmd.Flags().BoolP("force", "f", false, "Force removal")
+	removeCmd.Flags().BoolVar(&removePreview, "preview", false, "Show git status preview")
 	rootCmd.AddCommand(removeCmd)
 
 	rootCmd.AddCommand(&cobra.Command{
@@ -49,7 +53,7 @@ func main() {
 
 // --- Handlers ---
 
-func runJump(cmd *cobra.Command, args []string) {
+func runJump(cmd *cobra.Command, args []string, preview bool) {
 	if len(args) > 0 {
 		path, err := findWorktreePathForBranch(args[0])
 		if err != nil {
@@ -64,19 +68,21 @@ func runJump(cmd *cobra.Command, args []string) {
 		fail(err)
 	}
 
-	idx, err := fuzzyfinder.Find(
-		worktrees,
-		func(i int) string { return worktrees[i].Display },
-		// "Reverse" feel: Prompt at top (Search moves down) is the default in some libs,
-		// but fuzzyfinder standard is bottom-up.
-		// We use standard settings but the list is pre-sorted with current dir at top.
-		fuzzyfinder.WithPreviewWindow(func(i int, w, h int) string {
+	var opts []fuzzyfinder.Option
+	if preview {
+		opts = append(opts, fuzzyfinder.WithPreviewWindow(func(i int, w, h int) string {
 			if i == -1 {
 				return ""
 			}
 			out, _ := exec.Command("git", "-C", worktrees[i].AbsPath, "status", "--short").Output()
 			return string(out)
-		}),
+		}))
+	}
+
+	idx, err := fuzzyfinder.Find(
+		worktrees,
+		func(i int) string { return worktrees[i].Display },
+		opts...,
 	)
 	if err != nil {
 		os.Exit(1)
@@ -111,23 +117,28 @@ func runAdd(cmd *cobra.Command, args []string) {
 	printPath(newPath)
 }
 
-func runRemove(cmd *cobra.Command, args []string) {
+func runRemove(cmd *cobra.Command, args []string, preview bool) {
 	worktrees, err := getWorktreesSorted()
 	if err != nil {
 		fail(err)
+	}
+
+	var opts []fuzzyfinder.Option
+	if preview {
+		opts = append(opts, fuzzyfinder.WithPreviewWindow(func(i int, w, h int) string {
+			if i == -1 {
+				return ""
+			}
+			out, _ := exec.Command("git", "-C", worktrees[i].AbsPath, "status", "--short").Output()
+			return string(out)
+		}))
 	}
 
 	// Use FindMulti instead of Find
 	idxs, err := fuzzyfinder.FindMulti(
 		worktrees,
 		func(i int) string { return worktrees[i].Display },
-		fuzzyfinder.WithPreviewWindow(func(i int, w, h int) string {
-			if i == -1 {
-				return ""
-			}
-			out, _ := exec.Command("git", "-C", worktrees[i].AbsPath, "status", "--short").Output()
-			return string(out)
-		}),
+		opts...,
 	)
 	if err != nil {
 		os.Exit(1)
