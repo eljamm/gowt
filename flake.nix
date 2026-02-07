@@ -121,8 +121,16 @@
         package = wrapper;
       }
     )
-    // flake-utils.lib.eachDefaultSystem (system: {
-      # nix build .#packages.${system}.default -L
-      packages.default = self.package;
-    });
+    // flake-utils.lib.eachDefaultSystem (
+      system:
+      let
+        pkgs = import nixpkgs { inherit system; };
+      in
+      {
+        # nix run .#default -L
+        packages.default = pkgs.writeShellScriptBin "gwt-demo" ''
+          ${pkgs.bashInteractive}/bin/bash -i -c "source ${self.package}/share/gwt/gwt.sh && gwt"
+        '';
+      }
+    );
 }

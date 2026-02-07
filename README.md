@@ -4,6 +4,14 @@ Vibe rewrite of https://github.com/gko/gwt/blob/master/gwt.sh
 
 Licensed the same as the above project.
 
+## Quickstart
+
+To run this tool without innstalling it:
+
+```shellSession
+nix run github:eljamm/gowt
+```
+
 ## Install
 
 Don't use this, this is a quick vibed tool based on the above, use that if
