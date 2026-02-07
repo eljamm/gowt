@@ -69,16 +69,16 @@ Use the following configuration, depending on which shell you want:
 }:
 {
   programs.fish.interactiveShellInit = ''
-    source ${pkgs.gwt}/share/gwt/gwt.fish
+    source ${pkgs.gwt.fishWrapper}
     alias g gwt
   '';
 
   programs.bash.initExtra = ''
-    source ${pkgs.gwt}/share/gwt/gwt.sh
+    source ${pkgs.gwt.shWrapper}
   '';
 
   programs.zsh.initContent = ''
-    source ${pkgs.gwt}/share/gwt/gwt.sh
+    source ${pkgs.gwt.shWrapper}
     alias g=gwt
   '';
 }

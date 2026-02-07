@@ -22,17 +22,25 @@
         pkgs = import nixpkgs { inherit system; };
 
         gwt-bin = pkgs.callPackage ./nix/package.nix { };
-        wrapper = pkgs.callPackage ./nix/wrapper.nix { inherit gwt-bin; };
+        # t = stdenv.mkDerivation {
+        #   pname = "gwt-wrapper";
+        #   version = "0.0.1";
+        #   phases = [ "installPhase" ];
+        #   installPhase = ''
+        #     mkdir -p $out/share/gwt
+        #     cp ${shWrapper} $out/share/gwt/gwt.sh
+        #     cp ${fishWrapper} $out/share/gwt/gwt.fish
+        #   '';
+        # };
         package = pkgs.writeShellScriptBin "gwt" ''
           ${pkgs.bashInteractive}/bin/bash -i -c \
-          "source ${wrapper}/share/gwt/gwt.sh && gwt"
+          "source ${gwt-bin.passthru.shWrapper} && gwt"
         '';
       in
       {
-        # See README.md
+        # See README.md for installation instructions
         default = package;
-        gwt = package;
-        shell = wrapper;
+        gwt = gwt-bin;
       }
     )
     // flake-utils.lib.eachDefaultSystem (system: {
