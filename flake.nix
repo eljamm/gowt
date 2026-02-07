@@ -16,7 +16,7 @@
       flake-utils,
       ...
     }:
-    flake-utils.lib.eachDefaultSystem (
+    flake-utils.lib.eachDefaultSystemPassThrough (
       system:
       let
         pkgs = import nixpkgs { inherit system; };
@@ -105,9 +105,7 @@
              source ${gwt-bin}/share/bash-completion/completions/gwt.bash
           fi
         '';
-      in
-      {
-        packages.default = pkgs.stdenv.mkDerivation {
+        wrapper = pkgs.stdenv.mkDerivation {
           pname = "gwt-wrapper";
           version = "0.0.1";
           phases = [ "installPhase" ];
@@ -117,6 +115,14 @@
             cp ${fishWrapper} $out/share/gwt/gwt.fish
           '';
         };
+      in
+      {
+        # nix build .#package -L
+        package = wrapper;
       }
-    );
+    )
+    // flake-utils.lib.eachDefaultSystem (system: {
+      # nix build .#packages.${system}.default -L
+      packages.default = self.package;
+    });
 }

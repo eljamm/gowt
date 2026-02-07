@@ -15,7 +15,7 @@ Only flakes + home-manager setup supported at this point.
 # add it to your nix flake inputs
 # add an overlay
 (_: _: {
-  gwt = inputs.gowt.packages.${system}.default;
+  gwt = inputs.gowt.package;
 })
 ```
 
