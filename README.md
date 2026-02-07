@@ -9,7 +9,7 @@ Licensed the same as the above project.
 To run this tool without innstalling it:
 
 ```shellSession
-nix run github:eljamm/gowt#gwt
+nix run github:eljamm/gowt
 ```
 
 ## Install
@@ -65,20 +65,21 @@ Use the following configuration, depending on which shell you want:
 
 ```nix
 {
-  pkgs,
+  inputs,
+  ...
 }:
 {
   programs.fish.interactiveShellInit = ''
-    source ${pkgs.gwt.fishWrapper}
+    source ${inputs.gowt.gwt.fishWrapper}
     alias g gwt
   '';
 
   programs.bash.initExtra = ''
-    source ${pkgs.gwt.shWrapper}
+    source ${inputs.gowt.gwt.shWrapper}
   '';
 
   programs.zsh.initContent = ''
-    source ${pkgs.gwt.shWrapper}
+    source ${inputs.gowt.gwt.shWrapper}
     alias g=gwt
   '';
 }

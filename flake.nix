@@ -22,24 +22,14 @@
         pkgs = import nixpkgs { inherit system; };
 
         gwt-bin = pkgs.callPackage ./nix/package.nix { };
-        # t = stdenv.mkDerivation {
-        #   pname = "gwt-wrapper";
-        #   version = "0.0.1";
-        #   phases = [ "installPhase" ];
-        #   installPhase = ''
-        #     mkdir -p $out/share/gwt
-        #     cp ${shWrapper} $out/share/gwt/gwt.sh
-        #     cp ${fishWrapper} $out/share/gwt/gwt.fish
-        #   '';
-        # };
-        package = pkgs.writeShellScriptBin "gwt" ''
-          ${pkgs.bashInteractive}/bin/bash -i -c \
-          "source ${gwt-bin.passthru.shWrapper} && gwt"
+        standalone = pkgs.writeShellScriptBin "gwt" ''
+          source ${gwt-bin.shWrapper} && gwt
         '';
       in
       {
         # See README.md for installation instructions
-        default = package;
+        default = standalone;
+        package = standalone;
         gwt = gwt-bin;
       }
     )
