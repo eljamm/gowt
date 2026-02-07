@@ -5,7 +5,6 @@
   git,
 
   # shell wrappers
-  stdenv,
   writeText,
   ...
 }:
