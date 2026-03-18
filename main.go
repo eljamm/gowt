@@ -14,13 +14,11 @@ import (
 )
 
 func main() {
-	var preview bool
 	var rootCmd = &cobra.Command{
 		Use:   "gwt",
 		Short: "Git Worktree Manager",
-		Run:   func(cmd *cobra.Command, args []string) { runJump(cmd, args, preview) },
+		Run:   func(cmd *cobra.Command, args []string) { runJump(cmd, args) },
 	}
-	rootCmd.Flags().BoolVar(&preview, "preview", false, "Show git status preview")
 
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "add [branch]",
@@ -29,14 +27,12 @@ func main() {
 		Run:   runAdd,
 	})
 
-	var removePreview bool
 	removeCmd := &cobra.Command{
 		Use:   "remove",
 		Short: "Interactively remove a worktree",
-		Run:   func(cmd *cobra.Command, args []string) { runRemove(cmd, args, removePreview) },
+		Run:   func(cmd *cobra.Command, args []string) { runRemove(cmd, args) },
 	}
 	removeCmd.Flags().BoolP("force", "f", false, "Force removal")
-	removeCmd.Flags().BoolVar(&removePreview, "preview", false, "Show git status preview")
 	rootCmd.AddCommand(removeCmd)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -46,7 +42,7 @@ func main() {
 
 // --- Handlers ---
 
-func runJump(cmd *cobra.Command, args []string, preview bool) {
+func runJump(cmd *cobra.Command, args []string) {
 	if len(args) > 0 {
 		path, err := findWorktreePathForBranch(args[0])
 		if err != nil {
@@ -61,21 +57,9 @@ func runJump(cmd *cobra.Command, args []string, preview bool) {
 		fail(err)
 	}
 
-	var opts []fuzzyfinder.Option
-	if preview {
-		opts = append(opts, fuzzyfinder.WithPreviewWindow(func(i int, w, h int) string {
-			if i == -1 {
-				return ""
-			}
-			out, _ := exec.Command("git", "-C", worktrees[i].AbsPath, "status", "--short").Output()
-			return string(out)
-		}))
-	}
-
 	idx, err := fuzzyfinder.Find(
 		worktrees,
 		func(i int) string { return worktrees[i].Display },
-		opts...,
 	)
 	if err != nil {
 		os.Exit(1)
@@ -110,27 +94,15 @@ func runAdd(cmd *cobra.Command, args []string) {
 	printPath(newPath)
 }
 
-func runRemove(cmd *cobra.Command, args []string, preview bool) {
+func runRemove(cmd *cobra.Command, args []string) {
 	worktrees, err := getWorktreesSorted()
 	if err != nil {
 		fail(err)
 	}
 
-	var opts []fuzzyfinder.Option
-	if preview {
-		opts = append(opts, fuzzyfinder.WithPreviewWindow(func(i int, w, h int) string {
-			if i == -1 {
-				return ""
-			}
-			out, _ := exec.Command("git", "-C", worktrees[i].AbsPath, "status", "--short").Output()
-			return string(out)
-		}))
-	}
-
 	idx, err := fuzzyfinder.Find(
 		worktrees,
 		func(i int) string { return worktrees[i].Display },
-		opts...,
 	)
 	if err != nil {
 		os.Exit(1)
