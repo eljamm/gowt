@@ -39,13 +39,6 @@ func main() {
 	removeCmd.Flags().BoolVar(&removePreview, "preview", false, "Show git status preview")
 	rootCmd.AddCommand(removeCmd)
 
-	rootCmd.AddCommand(&cobra.Command{
-		Use:     "main",
-		Aliases: []string{"master"},
-		Short:   "Jump to default branch worktree",
-		Run:     runJumpDefault,
-	})
-
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
@@ -134,8 +127,7 @@ func runRemove(cmd *cobra.Command, args []string, preview bool) {
 		}))
 	}
 
-	// Use FindMulti instead of Find
-	idxs, err := fuzzyfinder.FindMulti(
+	idx, err := fuzzyfinder.Find(
 		worktrees,
 		func(i int) string { return worktrees[i].Display },
 		opts...,
@@ -144,55 +136,20 @@ func runRemove(cmd *cobra.Command, args []string, preview bool) {
 		os.Exit(1)
 	}
 
-	// Collect paths to remove
-	var pathsToRemove []string
-	for _, i := range idxs {
-		pathsToRemove = append(pathsToRemove, worktrees[i].AbsPath)
-	}
-
-	// Confirm bulk action
-	fmt.Fprintf(os.Stderr, "Remove %d worktree(s)?\n", len(pathsToRemove))
-	for _, p := range pathsToRemove {
-		fmt.Fprintf(os.Stderr, " - %s\n", p)
-	}
-	fmt.Fprintf(os.Stderr, "[y/N] ")
-
-	reader := bufio.NewReader(os.Stdin)
-	res, _ := reader.ReadString('\n')
-	if strings.ToLower(strings.TrimSpace(res)) != "y" {
-		os.Exit(1)
-	}
-
-	// Execute removals
+	path := worktrees[idx].AbsPath
 	force, _ := cmd.Flags().GetBool("force")
-	baseArgs := []string{"worktree", "remove"}
+	args = []string{"worktree", "remove"}
 	if force {
-		baseArgs = append(baseArgs, "--force")
+		args = append(args, "--force", path)
+	} else {
+		args = append(args, path)
+	}
+	c := exec.Command("git", args...)
+	c.Stderr = os.Stderr
+	if err := c.Run(); err != nil {
+		fail(err)
 	}
 
-	for _, path := range pathsToRemove {
-		args := append(baseArgs, path)
-		c := exec.Command("git", args...)
-		c.Stderr = os.Stderr
-		if err := c.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to remove %s: %v\n", path, err)
-		} else {
-			fmt.Fprintf(os.Stderr, "Removed %s\n", path)
-		}
-	}
-
-	// Finally, jump to repo root (so we don't stay in a deleted dir)
-	out, _ := exec.Command("git", "rev-parse", "--show-toplevel").Output()
-	printPath(strings.TrimSpace(string(out)))
-}
-
-func runJumpDefault(cmd *cobra.Command, args []string) {
-	for _, b := range []string{"main", "master"} {
-		if p, err := findWorktreePathForBranch(b); err == nil {
-			printPath(p)
-			return
-		}
-	}
 	out, _ := exec.Command("git", "rev-parse", "--show-toplevel").Output()
 	printPath(strings.TrimSpace(string(out)))
 }
