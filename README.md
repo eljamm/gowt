@@ -4,6 +4,10 @@ Vibe rewrite of <https://github.com/gko/gwt/blob/master/gwt.sh>
 
 Licensed the same as the above project.
 
+> [!WARNING]
+> This project is mainly for experimenting with LLMs and to scratch a personal itch.
+> If you're interested in a tool like this, use the project mentioned above, instead.
+
 ## Quickstart
 
 To run this tool without innstalling it:
@@ -13,9 +17,6 @@ nix run github:eljamm/gowt
 ```
 
 ## Install
-
-Don't use this, this is a quick vibed tool based on the above, use that if
-interested in such a tool.
 
 ### Flakes
 
