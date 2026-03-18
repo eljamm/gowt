@@ -30,12 +30,14 @@
 ```go
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/ktr0731/go-fuzzyfinder"
 	"github.com/spf13/cobra"
@@ -48,10 +50,55 @@ import (
 - Use `fmt.Errorf("message: %w", err)` for wrapped errors
 - Return errors from helper functions, handle in callers
 - Ignore errors only when truly safe (use `_` sparingly)
+- Use `strings.EqualFold()` for case-insensitive string comparison
+- Handle all errors from `exec.Command()` - never ignore with `_` unless documented
 
 ## Output Functions
 
 ```go
 func printPath(p string) { fmt.Println(p) }  // prints path to stdout
 func fail(err error)     { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
+```
+
+## Helper Functions
+
+Extract reusable patterns into helper functions to avoid duplication.
+
+```go
+// Fuzzyfinder selection helper
+func selectWorktree(worktrees []WorktreeInfo) (int, error) {
+	return fuzzyfinder.Find(worktrees, func(i int) string {
+		return worktrees[i].Display
+	})
+}
+
+// Branch extraction from git worktree line
+func extractBranch(line string) string {
+	if idx := strings.Index(line, "["); idx != -1 {
+		if end := strings.Index(line[idx:], "]"); end != -1 {
+			return line[idx+1 : idx+end]
+		}
+	}
+	if idx := strings.Index(line, "("); idx != -1 {
+		if end := strings.Index(line[idx:], ")"); end != -1 {
+			return line[idx+1 : idx+end]
+		}
+	}
+	return ""
+}
+```
+
+## Context for Exec Commands
+
+Use `context.Context` with timeout for long-running git commands.
+
+```go
+ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+defer cancel()
+
+cmd := exec.CommandContext(ctx, "git", "worktree", "add", path, branch)
+cmd.Stderr = os.Stderr
+if err := cmd.Run(); err != nil {
+    fail(fmt.Errorf("failed to create worktree: %w", err))
+}
 ```
