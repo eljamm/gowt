@@ -218,7 +218,12 @@ func getWorktreesSorted(commander GitCommander) ([]WorktreeInfo, error) {
 		return nil, fmt.Errorf("failed to list worktrees: %w", err)
 	}
 
-	lines := strings.Split(strings.TrimSpace(out), "\n")
+	trimmed := strings.TrimSpace(out)
+	if trimmed == "" {
+		return nil, fmt.Errorf("no worktrees found")
+	}
+
+	lines := strings.Split(trimmed, "\n")
 
 	cwd, err := os.Getwd()
 	if err != nil {

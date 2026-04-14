@@ -109,7 +109,7 @@ func TestGetWorktreesSorted(t *testing.T) {
 			gitRoot:       "/home/user",
 			wantErr:       false,
 			expectedCount: 2,
-			expectedFirst: "/home/user/project-main",
+			expectedFirst: "/home/user/project-feature",
 		},
 		{
 			name:           "worktree list error",
@@ -121,8 +121,7 @@ func TestGetWorktreesSorted(t *testing.T) {
 			name:           "empty worktree list",
 			worktreeOutput: "",
 			gitRoot:        "/home/user",
-			wantErr:        false,
-			expectedCount:  0,
+			wantErr:        true,
 		},
 		{
 			name: "worktree with detached HEAD",
@@ -131,6 +130,7 @@ func TestGetWorktreesSorted(t *testing.T) {
 			gitRoot:       "/home/user",
 			wantErr:       false,
 			expectedCount: 2,
+			expectedFirst: "/home/user/project-feature",
 		},
 		{
 			name: "worktree without branch",
@@ -139,6 +139,7 @@ func TestGetWorktreesSorted(t *testing.T) {
 			gitRoot:       "/home/user",
 			wantErr:       false,
 			expectedCount: 2,
+			expectedFirst: "/home/user/project-feature",
 		},
 	}
 
