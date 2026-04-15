@@ -23,7 +23,7 @@ buildGoModule (finalAttrs: {
       (type == "directory" || lib.hasSuffix ".go" base || base == "go.mod" || base == "go.sum");
   };
 
-  vendorHash = "sha256-hyhsDn/QMxXYmXdmFwT8XAXg0nOUEhHDa2Miv2Kx8BI=";
+  vendorHash = "sha256-CJLTDn/ib2htab3gpyEYbAFq3iEjvc1nJ+2eqO9pYqE=";
 
   nativeBuildInputs = [ installShellFiles ];
 
