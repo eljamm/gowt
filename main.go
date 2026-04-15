@@ -50,6 +50,7 @@ type RenderRequest struct {
 	Items         []WorktreeInfo
 	Selected      int
 	StatusPrompt  string
+	NavDelta      int // -1 for up, +1 for down, 0 for none
 }
 
 type State interface {
@@ -111,10 +112,10 @@ func (s NormalState) HandleKey(e KeyEvent) (State, Action, RenderRequest) {
 		return s, ActionQuit, RenderRequest{}
 	}
 	switch e.Rune {
-	case 'j':
-		return s, ActionDraw, RenderRequest{ModeIndicator: " N "}
-	case 'k':
-		return s, ActionDraw, RenderRequest{ModeIndicator: " N "}
+	case 'j', 'J':
+		return s, ActionDraw, RenderRequest{ModeIndicator: " N ", NavDelta: 1}
+	case 'k', 'K':
+		return s, ActionDraw, RenderRequest{ModeIndicator: " N ", NavDelta: -1}
 	case 'i':
 		return InsertState{query: ""}, ActionDraw, RenderRequest{ModeIndicator: " I ", Query: ""}
 	case 'q', 'Q':
@@ -403,19 +404,17 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 			}
 		}
 
-		// Handle j/k navigation only in Normal mode
-		if req.ModeIndicator == " N " && (keyEvent.Rune == 'j' || keyEvent.Rune == 'k') {
-			visible := displayWorktrees(currentQuery)
-			if keyEvent.Rune == 'j' && selected < len(visible)-1 {
-				selected++
-			}
-			if keyEvent.Rune == 'k' && selected > 0 {
-				selected--
-			}
-		}
-
 		var nextState State
 		nextState, action, req = state.HandleKey(keyEvent)
+
+		// Handle navigation from state machine (j/k in Normal mode)
+		if req.NavDelta != 0 {
+			visible := displayWorktrees(currentQuery)
+			newSelected := selected + req.NavDelta
+			if newSelected >= 0 && newSelected < len(visible) {
+				selected = newSelected
+			}
+		}
 
 		// Extract query from RenderRequest to use for navigation bounds
 		currentQuery = req.Query
