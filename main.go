@@ -27,6 +27,128 @@ var (
 	modeFg      = tcell.ColorBlack
 )
 
+// State Machine Types
+
+type Action int
+
+const (
+	ActionNone Action = iota
+	ActionDraw
+	ActionQuit
+	ActionSelect
+)
+
+type KeyEvent struct {
+	Key  tcell.Key
+	Rune rune
+}
+
+type RenderRequest struct {
+	ModeIndicator string
+	ModeStyle     tcell.Style
+	Query         string
+	Items         []WorktreeInfo
+	Selected      int
+	StatusPrompt  string
+}
+
+type State interface {
+	HandleKey(e KeyEvent) (State, Action, RenderRequest)
+}
+
+// InsertState
+
+type InsertState struct {
+	query string
+}
+
+func (s InsertState) HandleKey(e KeyEvent) (State, Action, RenderRequest) {
+	switch e.Key {
+	case tcell.KeyUp, tcell.KeyCtrlP, tcell.KeyCtrlK:
+		// Navigation - handled in main loop via returning updated selection
+		return s, ActionDraw, RenderRequest{Query: s.query, ModeIndicator: " I "}
+	case tcell.KeyDown, tcell.KeyCtrlN, tcell.KeyCtrlJ:
+		return s, ActionDraw, RenderRequest{Query: s.query, ModeIndicator: " I "}
+	case tcell.KeyBackspace, tcell.KeyBackspace2:
+		if len(s.query) > 0 {
+			s.query = s.query[:len(s.query)-1]
+		}
+		return s, ActionDraw, RenderRequest{Query: s.query, ModeIndicator: " I "}
+	case tcell.KeyEsc:
+		if len(s.query) > 0 {
+			s.query = ""
+			return s, ActionDraw, RenderRequest{Query: s.query, ModeIndicator: " I "}
+		}
+		return NormalState{}, ActionDraw, RenderRequest{ModeIndicator: " N "}
+	case tcell.KeyEnter:
+		return s, ActionSelect, RenderRequest{Query: s.query, ModeIndicator: " I "}
+	case tcell.KeyCtrlC:
+		return s, ActionQuit, RenderRequest{}
+	default:
+		// All printable characters -> type in query
+		if e.Rune >= 32 && e.Rune < 127 {
+			s.query += string(e.Rune)
+		}
+		return s, ActionDraw, RenderRequest{Query: s.query, ModeIndicator: " I "}
+	}
+}
+
+// NormalState
+
+type NormalState struct{}
+
+func (s NormalState) HandleKey(e KeyEvent) (State, Action, RenderRequest) {
+	switch e.Key {
+	case tcell.KeyUp, tcell.KeyCtrlP, tcell.KeyCtrlK:
+		return s, ActionDraw, RenderRequest{ModeIndicator: " N "}
+	case tcell.KeyDown, tcell.KeyCtrlN, tcell.KeyCtrlJ:
+		return s, ActionDraw, RenderRequest{ModeIndicator: " N "}
+	case tcell.KeyEsc:
+		return ConfirmQuitState{}, ActionDraw, RenderRequest{ModeIndicator: " ? "}
+	case tcell.KeyEnter:
+		return s, ActionSelect, RenderRequest{ModeIndicator: " N "}
+	case tcell.KeyCtrlC:
+		return s, ActionQuit, RenderRequest{}
+	}
+	switch e.Rune {
+	case 'j':
+		return s, ActionDraw, RenderRequest{ModeIndicator: " N "}
+	case 'k':
+		return s, ActionDraw, RenderRequest{ModeIndicator: " N "}
+	case 'i':
+		return InsertState{query: ""}, ActionDraw, RenderRequest{ModeIndicator: " I ", Query: ""}
+	case 'q', 'Q':
+		return ConfirmQuitState{}, ActionDraw, RenderRequest{ModeIndicator: " ? "}
+	case 'y', 'Y':
+		// Only in confirm mode, not here
+	case 'n', 'N':
+		// Only in confirm mode
+	}
+	return s, ActionDraw, RenderRequest{ModeIndicator: " N "}
+}
+
+// ConfirmQuitState
+
+type ConfirmQuitState struct{}
+
+func (s ConfirmQuitState) HandleKey(e KeyEvent) (State, Action, RenderRequest) {
+	switch e.Key {
+	case tcell.KeyEsc:
+		return NormalState{}, ActionDraw, RenderRequest{ModeIndicator: " N "}
+	case tcell.KeyEnter:
+		return s, ActionQuit, RenderRequest{ModeIndicator: " ? "}
+	case tcell.KeyCtrlC:
+		return s, ActionQuit, RenderRequest{}
+	}
+	switch e.Rune {
+	case 'y', 'Y':
+		return s, ActionQuit, RenderRequest{ModeIndicator: " ? "}
+	case 'n', 'N':
+		return NormalState{}, ActionDraw, RenderRequest{ModeIndicator: " N "}
+	}
+	return s, ActionDraw, RenderRequest{ModeIndicator: " ? "}
+}
+
 // TODO: Replace color vars with config-based customization
 // - Add UIConfig struct with color fields
 // - Support loading from env vars or config file
@@ -151,24 +273,21 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 	if err != nil {
 		return -1, err
 	}
-	defer screen.Fini()
+	defer func() {
+		if screen != nil {
+			screen.Fini()
+		}
+	}()
 
 	if err := screen.Init(); err != nil {
+		screen = nil
 		return -1, err
 	}
 
-	type mode int
-	const (
-		modeNormal mode = iota
-		modeInsert
-	)
-
-	currentMode := modeInsert
+	var state State = InsertState{query: ""}
 	selected := 0
-	query := ""
-	confirmQuit := false
 
-	displayWorktrees := func() []WorktreeInfo {
+	displayWorktrees := func(query string) []WorktreeInfo {
 		if query == "" {
 			return worktrees
 		}
@@ -185,11 +304,11 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 		return filtered
 	}
 
-	draw := func() {
+	draw := func(req RenderRequest) {
 		screen.Clear()
 		width, height := screen.Size()
 
-		visible := displayWorktrees()
+		visible := displayWorktrees(req.Query)
 
 		selectedIdx := selected
 		if selectedIdx >= len(visible) {
@@ -222,31 +341,28 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 			}
 		}
 
-		var modeChar string
-		var modeStyle tcell.Style
-		if confirmQuit {
-			modeChar = " ? "
-			modeStyle = tcell.StyleDefault.Foreground(modeFg).Background(colorQuit)
-		} else if currentMode == modeInsert {
-			modeChar = " I "
-			modeStyle = tcell.StyleDefault.Foreground(modeFg).Background(colorInsert)
-		} else {
-			modeChar = " N "
-			modeStyle = tcell.StyleDefault.Foreground(modeFg).Background(colorNormal)
+		modeStyle := tcell.StyleDefault.Foreground(modeFg)
+		switch req.ModeIndicator {
+		case " N ":
+			modeStyle = modeStyle.Background(colorNormal)
+		case " I ":
+			modeStyle = modeStyle.Background(colorInsert)
+		case " ? ":
+			modeStyle = modeStyle.Background(colorQuit).Foreground(colorQuit)
 		}
 
-		for x, r := range modeChar {
+		for x, r := range req.ModeIndicator {
 			screen.SetContent(x, height-1, r, nil, modeStyle)
 		}
 
-		if currentMode == modeInsert {
-			for x, r := range query {
+		if req.ModeIndicator == " I " {
+			for x, r := range req.Query {
 				if x+3 >= width {
 					break
 				}
 				screen.SetContent(x+3, height-1, r, nil, tcell.StyleDefault.Background(filterBg).Foreground(filterFg))
 			}
-		} else if confirmQuit {
+		} else if req.ModeIndicator == " ? " {
 			prompt := "[Y/Enter] yes / [N/ESC] no"
 			for x, r := range prompt {
 				if x+3 >= width {
@@ -259,111 +375,69 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 		screen.Show()
 	}
 
-	for {
-		draw()
+	// Initial draw
+	var action Action
+	var req RenderRequest
+	state, action, req = state.HandleKey(KeyEvent{})
+	draw(req)
 
+	for {
 		ev := screen.PollEvent()
-		switch ev := ev.(type) {
-		case *tcell.EventKey:
-			switch ev.Key() {
-			case tcell.KeyEnter:
-				visible := displayWorktrees()
-				if confirmQuit {
-					return -1, fmt.Errorf("cancelled")
-				}
-				selectedIdx := selected
-				if selectedIdx >= len(visible) {
-					selectedIdx = len(visible) - 1
-				}
-				if selectedIdx < 0 {
-					selectedIdx = 0
-				}
-				if selectedIdx >= 0 && selectedIdx < len(visible) {
-					for i, wt := range worktrees {
-						if wt.AbsPath == visible[selectedIdx].AbsPath {
-							return i, nil
-						}
-					}
-				}
-				return selected, nil
-			case tcell.KeyEsc:
-				if currentMode == modeInsert {
-					if len(query) > 0 {
-						query = ""
-					} else {
-						currentMode = modeNormal
-					}
-				} else if confirmQuit {
-					confirmQuit = false
-				} else {
-					confirmQuit = true
-				}
-			case tcell.KeyBackspace, tcell.KeyBackspace2:
-				if currentMode == modeInsert && len(query) > 0 {
-					query = query[:len(query)-1]
-					if selected >= len(displayWorktrees())-1 {
-						selected = 0
-					}
-				}
-			case tcell.KeyDown, tcell.KeyCtrlN, tcell.KeyCtrlJ:
-				visible := displayWorktrees()
-				if selected < len(visible)-1 {
-					selected++
-				}
-			case tcell.KeyUp, tcell.KeyCtrlP, tcell.KeyCtrlK:
-				if selected > 0 {
-					selected--
-				}
-			case tcell.KeyCtrlC:
-				return -1, fmt.Errorf("cancelled")
+
+		var keyEvent KeyEvent
+		if ev, ok := ev.(*tcell.EventKey); ok {
+			keyEvent = KeyEvent{Key: ev.Key(), Rune: ev.Rune()}
+		}
+
+		// Handle navigation in main loop (need to update selected)
+		switch keyEvent.Key {
+		case tcell.KeyUp, tcell.KeyCtrlP, tcell.KeyCtrlK:
+			if selected > 0 {
+				selected--
 			}
-			switch ev.Rune() {
-			case 'j':
-				if currentMode == modeNormal && !confirmQuit {
-					visible := displayWorktrees()
-					if selected < len(visible)-1 {
-						selected++
-					}
-				}
-			case 'k':
-				if currentMode == modeNormal && !confirmQuit {
-					if selected > 0 {
-						selected--
-					}
-				}
-			case 'i':
-				if currentMode == modeNormal && !confirmQuit {
-					currentMode = modeInsert
-				}
-				fallthrough
-			case 'n', 'N':
-				if confirmQuit {
-					confirmQuit = false
-				}
-			case 'y', 'Y':
-				if confirmQuit {
-					return -1, fmt.Errorf("cancelled")
-				}
-			case 'q', 'Q':
-				if !confirmQuit && currentMode == modeNormal {
-					return -1, fmt.Errorf("cancelled")
-				}
-			case 'p', 'P':
-				// Don't add to query - could be stray Ctrl-P in some terminals
-			case 0:
-				// Non-printable characters (e.g., ESC) - do nothing
-			default:
-				if confirmQuit {
-					confirmQuit = false
-					break
-				}
-				if currentMode == modeInsert {
-					if r := ev.Rune(); r >= 32 && r < 127 {
-						query += string(r)
+		case tcell.KeyDown, tcell.KeyCtrlN, tcell.KeyCtrlJ:
+			visible := displayWorktrees("")
+			if selected < len(visible)-1 {
+				selected++
+			}
+		}
+
+		// Also handle j/k in normal mode here (states return action for these)
+		if keyEvent.Rune == 'j' || keyEvent.Rune == 'k' {
+			visible := displayWorktrees("")
+			if keyEvent.Rune == 'j' && selected < len(visible)-1 {
+				selected++
+			}
+			if keyEvent.Rune == 'k' && selected > 0 {
+				selected--
+			}
+		}
+
+		var nextState State
+		nextState, action, req = state.HandleKey(keyEvent)
+		state = nextState
+		draw(req)
+
+		if action == ActionQuit {
+			return -1, fmt.Errorf("cancelled")
+		}
+		if action == ActionSelect {
+			visible := displayWorktrees("")
+			selectedIdx := selected
+			if selectedIdx >= len(visible) {
+				selectedIdx = len(visible) - 1
+			}
+			if selectedIdx < 0 {
+				selectedIdx = 0
+			}
+			if selectedIdx >= 0 && selectedIdx < len(visible) {
+				for i, wt := range worktrees {
+					if wt.AbsPath == visible[selectedIdx].AbsPath {
+						return i, nil
 					}
 				}
 			}
-		case *tcell.EventResize:
+			return selected, nil
 		}
 	}
 }
