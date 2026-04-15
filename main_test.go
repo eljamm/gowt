@@ -366,6 +366,69 @@ func TestStateTransitions(t *testing.T) {
 		}
 	})
 
+	t.Run("NormalState with count prefix", func(t *testing.T) {
+		state := NormalState{count: 3}
+
+		_, _, req := state.HandleKey(KeyEvent{Rune: 'k'})
+		if req.NavDelta != -3 {
+			t.Errorf("NavDelta = %d, want -3 for '3k'", req.NavDelta)
+		}
+
+		state = NormalState{count: 3}
+		_, _, req = state.HandleKey(KeyEvent{Rune: 'j'})
+		if req.NavDelta != 3 {
+			t.Errorf("NavDelta = %d, want 3 for '3j'", req.NavDelta)
+		}
+
+		state = NormalState{count: 20}
+		_, _, req = state.HandleKey(KeyEvent{Rune: 'g'})
+		if req.NavTarget != 19 {
+			t.Errorf("NavTarget = %d, want 19 for '20g'", req.NavTarget)
+		}
+
+		state = NormalState{count: 1}
+		_, _, req = state.HandleKey(KeyEvent{Rune: 'G'})
+		if req.NavTarget != 0 {
+			t.Errorf("NavTarget = %d, want 0 for '1G'", req.NavTarget)
+		}
+
+		state = NormalState{count: 0}
+		_, _, req = state.HandleKey(KeyEvent{Rune: 'g'})
+		if !req.NavTop {
+			t.Error("expected NavTop for plain 'g'")
+		}
+
+		state = NormalState{count: 0}
+		_, _, req = state.HandleKey(KeyEvent{Rune: 'G'})
+		if !req.NavBottom {
+			t.Error("expected NavBottom for plain 'G'")
+		}
+	})
+
+	t.Run("NormalState digit accumulation", func(t *testing.T) {
+		state := NormalState{}
+
+		nextState, _, _ := state.HandleKey(KeyEvent{Rune: '3'})
+		state = nextState.(NormalState)
+		if state.count != 3 {
+			t.Errorf("count = %d, want 3", state.count)
+		}
+
+		nextState, _, _ = state.HandleKey(KeyEvent{Rune: '2'})
+		state = nextState.(NormalState)
+		if state.count != 32 {
+			t.Errorf("count = %d, want 32", state.count)
+		}
+
+		nextState, _, _ = state.HandleKey(KeyEvent{Rune: '0'})
+		state = nextState.(NormalState)
+		if state.count != 320 {
+			t.Errorf("count = %d, want 320", state.count)
+		}
+
+		_, _, _ = state.HandleKey(KeyEvent{Rune: 'i'})
+	})
+
 	t.Run("NormalState mode changes", func(t *testing.T) {
 		state := NormalState{}
 
