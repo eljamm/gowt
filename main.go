@@ -274,6 +274,9 @@ func runJump(cmd *cobra.Command, args []string) {
 	if err != nil {
 		fail(err)
 	}
+	if idx < 0 {
+		return
+	}
 
 	printPath(worktrees[idx].AbsPath)
 }
@@ -314,6 +317,9 @@ func runRemove(cmd *cobra.Command, args []string) {
 	idx, err := selectWorktree(worktrees)
 	if err != nil {
 		fail(err)
+	}
+	if idx < 0 {
+		return
 	}
 
 	path := worktrees[idx].AbsPath
@@ -696,7 +702,7 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 		draw(req)
 
 		if action == ActionQuit {
-			return -1, fmt.Errorf("cancelled")
+			return -1, nil
 		}
 		if action == ActionSelect {
 			visible := displayWorktrees(currentQuery)
