@@ -342,6 +342,8 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 				if !confirmQuit {
 					return -1, fmt.Errorf("cancelled")
 				}
+			case 0:
+				// Non-printable characters (e.g., ESC) - do nothing
 			default:
 				if confirmQuit {
 					confirmQuit = false
