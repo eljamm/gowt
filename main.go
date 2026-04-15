@@ -54,9 +54,10 @@ type RenderRequest struct {
 	Items         []WorktreeInfo
 	Selected      int
 	StatusPrompt  string
-	NavDelta      int // -1 for up, +1 for down, 0 for none
-	NavTop        bool
-	NavBottom     bool
+	NavDelta      int  // -1 for up, +1 for down, 0 for none
+	NavTop        bool // g without count
+	NavBottom     bool // G without count
+	NavTarget     int  // 0 = none, 1-based line number
 }
 
 type State interface {
@@ -102,7 +103,9 @@ func (s InsertState) HandleKey(e KeyEvent) (State, Action, RenderRequest) {
 
 // NormalState
 
-type NormalState struct{}
+type NormalState struct {
+	count int // accumulated count prefix (0 if none)
+}
 
 func (s NormalState) HandleKey(e KeyEvent) (State, Action, RenderRequest) {
 	switch e.Key {
@@ -111,30 +114,61 @@ func (s NormalState) HandleKey(e KeyEvent) (State, Action, RenderRequest) {
 	case tcell.KeyDown, tcell.KeyCtrlN, tcell.KeyCtrlJ:
 		return s, ActionDraw, RenderRequest{ModeIndicator: " N "}
 	case tcell.KeyEsc:
+		s.count = 0
 		return ConfirmQuitState{}, ActionDraw, RenderRequest{ModeIndicator: " ? "}
 	case tcell.KeyEnter:
+		s.count = 0
 		return s, ActionSelect, RenderRequest{ModeIndicator: " N "}
 	case tcell.KeyCtrlC:
+		s.count = 0
 		return s, ActionQuit, RenderRequest{}
 	}
 	switch e.Rune {
 	case 'j', 'J':
-		return s, ActionDraw, RenderRequest{ModeIndicator: " N ", NavDelta: 1}
+		delta := s.count
+		if delta == 0 {
+			delta = 1
+		}
+		s.count = 0
+		return s, ActionDraw, RenderRequest{ModeIndicator: " N ", NavDelta: delta}
 	case 'k', 'K':
-		return s, ActionDraw, RenderRequest{ModeIndicator: " N ", NavDelta: -1}
+		delta := s.count
+		if delta == 0 {
+			delta = -1
+		}
+		s.count = 0
+		return s, ActionDraw, RenderRequest{ModeIndicator: " N ", NavDelta: delta}
 	case 'g':
+		if s.count > 0 {
+			idx := s.count - 1 // 1-based to 0-based
+			s.count = 0
+			return s, ActionDraw, RenderRequest{ModeIndicator: " N ", NavTarget: idx}
+		}
+		s.count = 0
 		return s, ActionDraw, RenderRequest{ModeIndicator: " N ", NavTop: true}
 	case 'G':
+		if s.count > 0 {
+			idx := s.count - 1 // 1-based to 0-based
+			s.count = 0
+			return s, ActionDraw, RenderRequest{ModeIndicator: " N ", NavTarget: idx}
+		}
+		s.count = 0
 		return s, ActionDraw, RenderRequest{ModeIndicator: " N ", NavBottom: true}
 	case 'i':
+		s.count = 0
 		return InsertState{query: ""}, ActionDraw, RenderRequest{ModeIndicator: " I ", Query: ""}
 	case 'q', 'Q':
+		s.count = 0
 		return ConfirmQuitState{}, ActionDraw, RenderRequest{ModeIndicator: " ? "}
 	case 'y', 'Y':
 		// Only in confirm mode, not here
 	case 'n', 'N':
 		// Only in confirm mode
+	case '0', '1', '2', '3', '4', '5', '6', '7', '8', '9':
+		s.count = s.count*10 + int(e.Rune-'0')
+		return s, ActionDraw, RenderRequest{ModeIndicator: " N "}
 	}
+	s.count = 0
 	return s, ActionDraw, RenderRequest{ModeIndicator: " N "}
 }
 
@@ -470,7 +504,7 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 		nextState, action, req = state.HandleKey(keyEvent)
 
 		// Handle navigation from state machine (j/k/g/G in Normal mode)
-		if req.NavDelta != 0 || req.NavTop || req.NavBottom {
+		if req.NavDelta != 0 || req.NavTop || req.NavBottom || req.NavTarget > 0 {
 			visible := displayWorktrees(currentQuery)
 			if req.NavTop {
 				selected = 0
@@ -480,6 +514,15 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 				} else {
 					selected = 0
 				}
+			} else if req.NavTarget > 0 {
+				targetIdx := req.NavTarget
+				if targetIdx < 0 {
+					targetIdx = 0
+				}
+				if targetIdx >= len(visible) {
+					targetIdx = len(visible) - 1
+				}
+				selected = targetIdx
 			} else {
 				newSelected := selected + req.NavDelta
 				if newSelected >= 0 && newSelected < len(visible) {
