@@ -332,7 +332,7 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 	}
 
 	var state State = InsertState{query: ""}
-	selected := 0
+	selected := -1
 
 	numDigits := len(fmt.Sprintf("%d", len(worktrees)))
 	numPad := fmt.Sprintf("%%%dd", numDigits)
@@ -376,10 +376,9 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 		visible := displayWorktrees(req.Query)
 
 		selectedIdx := selected
-		if selectedIdx >= len(visible) {
-			selectedIdx = len(visible) - 1
-		}
 		if selectedIdx < 0 {
+			selectedIdx = len(visible) - 1
+		} else if selectedIdx >= len(visible) {
 			selectedIdx = 0
 		}
 
