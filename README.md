@@ -29,7 +29,8 @@ Works in Insert mode by default when the TUI opens.
 | `Enter` | Select current worktree |
 | `ESC` | Clear query (if non-empty) or switch to Normal |
 | `Ctrl-c` | Quit |
-| `↓` / `↑` or `Ctrl-n` / `Ctrl-p` | Move up/down one line |
+| `↓` / `Ctrl-j` / `Ctrl-n` | Move down one line |
+| `↑` / `Ctrl-k` / `Ctrl-p` | Move up one line |
 | `Ctrl-d` | Page down (half window) |
 | `Ctrl-u` | Page up (half window) |
 
@@ -43,7 +44,8 @@ Press `ESC` from Insert mode to enter Normal mode.
 | `q` / `Q` | Enter Confirm mode |
 | `Enter` | Select current worktree |
 | `ESC` | Enter Confirm mode (quit prompt) |
-| `j` / `k` or `↓` / `↑` | Move up/down one line |
+| `↓` / `Ctrl-j` / `Ctrl-n` | Move down one line |
+| `↑` / `Ctrl-k` / `Ctrl-p` | Move up one line |
 | `n j` / `n k` | Move by n lines (e.g., `5j`) |
 | `g` | Go to first item |
 | `G` | Go to last item |
@@ -65,13 +67,13 @@ Press `q` or `Q` in Normal mode to enter confirm mode.
 
 ## Quickstart
 
-To run this tool without innstalling it:
+If you have [Nix](https://nixos.org) installed, you can run this tool without installing it:
 
 ```shellSession
 nix run github:eljamm/gowt
 ```
 
-## Install
+## Install (Nix)
 
 ### Flakes
 
@@ -109,6 +111,8 @@ Use the following module in your NixOS system:
 }
 ```
 
+This includes a shell wrapper that automatically `cd`s into the selected worktree.
+
 After rebuilding and switching your system, the tool will be available:
 
 ```shellSession
@@ -139,4 +143,72 @@ Use the following configuration, depending on which shell you want:
     alias g=gwt
   '';
 }
+```
+
+## Manual Build
+
+Requires Go 1.21+.
+
+```shell
+git clone https://github.com/eljamm/gowt.git
+cd gowt
+go install
+```
+
+The binary will be installed to `$GOBIN` (defaults to `$GOPATH/bin` or `$HOME/go/bin`).
+Make sure that directory is in your `PATH`.
+
+The binary prints the path to the selected worktree.
+To automatically `cd` into it, you need a shell wrapper.
+
+### Shell Wrapper
+
+Add the following to your shell config:
+
+**Bash** (add to `~/.bashrc`):
+
+```bash
+gwt() {
+  output=$(gwt "$@")
+  exit_code=$?
+  if [ $exit_code -eq 0 ] && [ -d "$output" ]; then
+    cd "$output"
+  else
+    printf "%s\n" "$output"
+  fi
+}
+```
+
+**Zsh** (add to `~/.zshrc`):
+
+```zsh
+gwt() {
+  output=$(gwt "$@")
+  exit_code=$?
+  if [ $exit_code -eq 0 ] && [ -d "$output" ]; then
+    cd "$output"
+  else
+    printf "%s\n" "$output"
+  fi
+}
+```
+
+**Fish** (add to `~/.config/fish/config.fish`):
+
+```fish
+function gwt
+    set -l output (gwt $argv)
+    set -l exit_code $status
+    if test $exit_code -eq 0 -a -d "$output"
+        cd "$output"
+    else
+        printf "%s\n" "$output"
+    end
+end
+```
+
+Or run without installing:
+
+```shell
+go run .
 ```
