@@ -333,10 +333,11 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 
 	var state State = InsertState{query: ""}
 	selected := -1
+	windowTop := 0
 	if gitDir, err := defaultCommander.gitCommonDir(); err == nil && gitDir != "" {
 		gitRoot := strings.TrimSuffix(gitDir, "/.git")
 		for i, wt := range worktrees {
-			if wt.AbsPath == gitRoot {
+			if wt.AbsPath == gitRoot || strings.HasPrefix(wt.AbsPath, gitRoot+"/") {
 				selected = i
 				break
 			}
@@ -392,18 +393,31 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 		}
 
 		listHeight := height - 1
-		startRow := listHeight - len(visible)
-		if startRow < 0 {
-			startRow = 0
+		windowRatio := 0.75
+		windowHeight := int(float64(listHeight) * windowRatio)
+		if windowHeight < 1 {
+			windowHeight = 1
+		}
+		if windowTop+windowHeight > len(visible) {
+			windowTop = len(visible) - windowHeight
+		}
+		if windowTop < 0 {
+			windowTop = 0
 		}
 
 		arrowStyle := tcell.StyleDefault.Foreground(arrowFg)
 		numberStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkGray)
 
-		for i, wt := range visible {
-			row := startRow + i
-			if row >= height-1 {
-				break
+		for i := windowTop; i < len(visible); i++ {
+			wt := visible[i]
+			totalShow := windowHeight
+			if totalShow > len(visible) {
+				totalShow = len(visible)
+			}
+			startRow := listHeight - totalShow
+			row := startRow + (i - windowTop)
+			if row >= height-1 || row < 0 {
+				continue
 			}
 			if i == selectedIdx {
 				screen.SetContent(0, row, '>', nil, arrowStyle)
@@ -518,6 +532,19 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 			}
 		}
 
+		_, screenHeight := screen.Size()
+		listHeight := screenHeight - 1
+		windowRatio := 0.75
+		windowHeight := int(float64(listHeight) * windowRatio)
+		if windowHeight < 1 {
+			windowHeight = 1
+		}
+		if selected < windowTop {
+			windowTop = selected
+		} else if selected >= windowTop+windowHeight {
+			windowTop = selected - windowHeight + 1
+		}
+
 		var nextState State
 		nextState, action, req = state.HandleKey(keyEvent)
 
@@ -556,6 +583,19 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 						selected = newSelected
 					}
 				}
+			}
+
+			_, screenHeight := screen.Size()
+			listHeight := screenHeight - 1
+			windowRatio := 0.75
+			windowHeight := int(float64(listHeight) * windowRatio)
+			if windowHeight < 1 {
+				windowHeight = 1
+			}
+			if selected < windowTop {
+				windowTop = selected
+			} else if selected >= windowTop+windowHeight {
+				windowTop = selected - windowHeight + 1
 			}
 		}
 
