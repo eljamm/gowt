@@ -135,6 +135,8 @@ func (s NormalState) HandleKey(e KeyEvent) (State, Action, RenderRequest) {
 		delta := s.count
 		if delta == 0 {
 			delta = -1
+		} else {
+			delta = -delta // count before k flips direction (like vim)
 		}
 		s.count = 0
 		return s, ActionDraw, RenderRequest{ModeIndicator: " N ", NavDelta: delta}
@@ -525,8 +527,18 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 				selected = targetIdx
 			} else {
 				newSelected := selected + req.NavDelta
-				if newSelected >= 0 && newSelected < len(visible) {
-					selected = newSelected
+				if req.NavDelta > 0 {
+					if newSelected >= len(visible) {
+						selected = len(visible) - 1
+					} else {
+						selected = newSelected
+					}
+				} else {
+					if newSelected < 0 {
+						selected = 0
+					} else {
+						selected = newSelected
+					}
 				}
 			}
 		}
