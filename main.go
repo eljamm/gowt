@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gdamore/tcell/v2"
+	"github.com/ktr0731/go-fuzzyfinder/matching"
 	"github.com/spf13/cobra"
 )
 
@@ -25,6 +26,7 @@ var (
 	filterBg    = tcell.ColorBlack
 	filterFg    = tcell.ColorWhite
 	modeFg      = tcell.ColorBlack
+	highlightFg = tcell.ColorYellow
 )
 
 // State Machine Types
@@ -288,21 +290,44 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 	var state State = InsertState{query: ""}
 	selected := 0
 
-	displayWorktrees := func(query string) []WorktreeInfo {
+	displayWorktrees := func(query string) []matchedWorktree {
 		if query == "" {
-			return worktrees
+			result := make([]matchedWorktree, len(worktrees))
+			for i, wt := range worktrees {
+				result[i] = matchedWorktree{WorktreeInfo: wt}
+			}
+			return result
 		}
-		lowerQuery := strings.ToLower(query)
-		var filtered []WorktreeInfo
-		for _, wt := range worktrees {
-			if strings.Contains(strings.ToLower(wt.Display), lowerQuery) {
-				filtered = append(filtered, wt)
+
+		displayStrs := make([]string, len(worktrees))
+		for i, wt := range worktrees {
+			displayStrs[i] = wt.Display
+		}
+
+		matched := matching.FindAll(query, displayStrs, matching.WithMode(matching.ModeSmart))
+		if len(matched) == 0 {
+			result := make([]matchedWorktree, len(worktrees))
+			for i, wt := range worktrees {
+				result[i] = matchedWorktree{WorktreeInfo: wt}
+			}
+			return result
+		}
+
+		matchedMap := make(map[int][2]int, len(matched))
+		for _, m := range matched {
+			matchedMap[m.Idx] = m.Pos
+		}
+
+		result := make([]matchedWorktree, 0, len(matched))
+		for i, wt := range worktrees {
+			if pos, ok := matchedMap[i]; ok {
+				result = append(result, matchedWorktree{
+					WorktreeInfo:   wt,
+					MatchPositions: [][2]int{pos},
+				})
 			}
 		}
-		if len(filtered) == 0 {
-			return worktrees
-		}
-		return filtered
+		return result
 	}
 
 	draw := func(req RenderRequest) {
@@ -338,7 +363,17 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 				if x+3 >= width {
 					break
 				}
-				screen.SetContent(x+3, row, r, nil, style)
+				charStyle := style
+				for _, pos := range wt.MatchPositions {
+					if x >= pos[0] && x < pos[1] {
+						charStyle = style.Foreground(highlightFg)
+						if i == selectedIdx {
+							charStyle = charStyle.Background(selectedBg)
+						}
+						break
+					}
+				}
+				screen.SetContent(x+3, row, r, nil, charStyle)
 			}
 		}
 
@@ -529,6 +564,11 @@ type WorktreeInfo struct {
 	Commit  string
 	Branch  string
 	IsCwd   bool
+}
+
+type matchedWorktree struct {
+	WorktreeInfo
+	MatchPositions [][2]int
 }
 
 func getWorktreesSorted(commander GitCommander) ([]WorktreeInfo, error) {
