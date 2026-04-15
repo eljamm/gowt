@@ -48,6 +48,46 @@ type WorktreeInfo struct {
 - Sort order: current worktree first, then alphabetical by Display name
 - Parse both `[branch]` and `(detached)` formats from output
 
+## Commands
+
+### `gwt` (root)
+Jump to a worktree via fuzzy TUI. With arg: jump to branch by name.
+
+```go
+rootCmd := &cobra.Command{
+    Use:   "gwt",
+    Short: "Git Worktree Manager",
+    Run:   func(cmd *cobra.Command, args []string) { runJump(cmd, args) },
+}
+```
+
+### `gwt add <branch>`
+Create a worktree from an existing or new branch.
+
+```go
+rootCmd.AddCommand(&cobra.Command{
+    Use:   "add [branch]",
+    Short: "Create a worktree from a branch",
+    Args:  cobra.ExactArgs(1),
+    Run:   runAdd,
+})
+```
+
+If branch doesn't exist, prompts to create it with `git worktree add -b`.
+
+### `gwt remove [-f|--force]`
+Interactively remove a worktree.
+
+```go
+removeCmd := &cobra.Command{
+    Use:   "remove",
+    Short: "Interactively remove a worktree",
+    Run:   func(cmd *cobra.Command, args []string) { runRemove(cmd, args) },
+}
+removeCmd.Flags().BoolP("force", "f", false, "Force removal")
+rootCmd.AddCommand(removeCmd)
+```
+
 ## Git Command Execution
 
 ```go

@@ -39,7 +39,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ktr0731/go-fuzzyfinder"
+	"github.com/gdamore/tcell/v2"
+	"github.com/ktr0731/go-fuzzyfinder/matching"
 	"github.com/spf13/cobra"
 )
 ```
@@ -65,13 +66,6 @@ func fail(err error)     { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
 Extract reusable patterns into helper functions to avoid duplication.
 
 ```go
-// Fuzzyfinder selection helper
-func selectWorktree(worktrees []WorktreeInfo) (int, error) {
-	return fuzzyfinder.Find(worktrees, func(i int) string {
-		return worktrees[i].Display
-	})
-}
-
 // Branch extraction from git worktree line
 func extractBranch(line string) string {
 	if idx := strings.Index(line, "["); idx != -1 {
