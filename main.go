@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ktr0731/go-fuzzyfinder"
+	"github.com/gdamore/tcell/v2"
 	"github.com/spf13/cobra"
 )
 
@@ -121,9 +121,200 @@ func runRemove(cmd *cobra.Command, args []string) {
 // --- Helpers ---
 
 func selectWorktree(worktrees []WorktreeInfo) (int, error) {
-	return fuzzyfinder.Find(worktrees, func(i int) string {
-		return worktrees[i].Display
-	})
+	return selectWorktreeTUI(worktrees)
+}
+
+func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
+	screen, err := tcell.NewScreen()
+	if err != nil {
+		return -1, err
+	}
+	defer screen.Fini()
+
+	if err := screen.Init(); err != nil {
+		return -1, err
+	}
+
+	type mode int
+	const (
+		modeNormal mode = iota
+		modeInsert
+	)
+
+	currentMode := modeNormal
+	selected := 0
+	query := ""
+	confirmQuit := false
+
+	displayWorktrees := func() []WorktreeInfo {
+		if query == "" {
+			return worktrees
+		}
+		lowerQuery := strings.ToLower(query)
+		var filtered []WorktreeInfo
+		for _, wt := range worktrees {
+			if strings.Contains(strings.ToLower(wt.Display), lowerQuery) {
+				filtered = append(filtered, wt)
+			}
+		}
+		if len(filtered) == 0 {
+			return worktrees
+		}
+		return filtered
+	}
+
+	draw := func() {
+		screen.Clear()
+		width, height := screen.Size()
+
+		visible := displayWorktrees()
+
+		selectedIdx := selected
+		if selectedIdx >= len(visible) {
+			selectedIdx = len(visible) - 1
+		}
+		if selectedIdx < 0 {
+			selectedIdx = 0
+		}
+
+		for i, wt := range visible {
+			if i >= height-2 {
+				break
+			}
+			style := tcell.StyleDefault
+			if i == selectedIdx {
+				style = style.Reverse(true)
+			}
+			for x, r := range wt.Display {
+				if x >= width {
+					break
+				}
+				screen.SetContent(x, i, r, nil, style)
+			}
+		}
+
+		if currentMode == modeInsert {
+			prompt := "Filter: " + query
+			for x, r := range prompt {
+				if x >= width {
+					break
+				}
+				screen.SetContent(x, height-1, r, nil, tcell.StyleDefault.Background(tcell.ColorDarkGray))
+			}
+		}
+
+		modeStr := "NORMAL"
+		if currentMode == modeInsert {
+			modeStr = "INSERT"
+		}
+		if confirmQuit {
+			modeStr = "QUIT?"
+		}
+		offset := width - len(modeStr) - 2
+		if offset > 0 {
+			style := tcell.StyleDefault.Foreground(tcell.ColorDarkCyan)
+			if confirmQuit {
+				style = tcell.StyleDefault.Foreground(tcell.ColorRed)
+			}
+			for x, r := range modeStr {
+				screen.SetContent(offset+x, 0, r, nil, style)
+			}
+		}
+
+		screen.Show()
+	}
+
+	for {
+		draw()
+
+		ev := screen.PollEvent()
+		switch ev := ev.(type) {
+		case *tcell.EventKey:
+			switch ev.Key() {
+			case tcell.KeyEnter:
+				visible := displayWorktrees()
+				selectedIdx := selected
+				if selectedIdx >= len(visible) {
+					selectedIdx = len(visible) - 1
+				}
+				if selectedIdx < 0 {
+					selectedIdx = 0
+				}
+				if selectedIdx >= 0 && selectedIdx < len(visible) {
+					for i, wt := range worktrees {
+						if wt.AbsPath == visible[selectedIdx].AbsPath {
+							return i, nil
+						}
+					}
+				}
+				return selected, nil
+			case tcell.KeyEsc:
+				if currentMode == modeInsert {
+					currentMode = modeNormal
+					query = ""
+					selected = 0
+				} else if confirmQuit {
+					return -1, fmt.Errorf("cancelled")
+				} else {
+					confirmQuit = true
+				}
+			case tcell.KeyBackspace, tcell.KeyBackspace2:
+				if currentMode == modeInsert && len(query) > 0 {
+					query = query[:len(query)-1]
+					if selected >= len(displayWorktrees())-1 {
+						selected = 0
+					}
+				}
+			case tcell.KeyDown, tcell.KeyCtrlN:
+				visible := displayWorktrees()
+				if selected < len(visible)-1 {
+					selected++
+				}
+			case tcell.KeyUp, tcell.KeyCtrlP:
+				if selected > 0 {
+					selected--
+				}
+			}
+			switch ev.Rune() {
+			case 'j':
+				if currentMode == modeNormal && !confirmQuit {
+					visible := displayWorktrees()
+					if selected < len(visible)-1 {
+						selected++
+					}
+				}
+			case 'k':
+				if currentMode == modeNormal && !confirmQuit {
+					if selected > 0 {
+						selected--
+					}
+				}
+			case 'i':
+				if currentMode == modeNormal && !confirmQuit {
+					currentMode = modeInsert
+				}
+			case 'n':
+				if confirmQuit {
+					confirmQuit = false
+				}
+			case 'q':
+				if !confirmQuit {
+					return -1, fmt.Errorf("cancelled")
+				}
+			default:
+				if confirmQuit {
+					confirmQuit = false
+					break
+				}
+				if currentMode == modeInsert {
+					if r := ev.Rune(); r >= 32 && r < 127 {
+						query += string(r)
+					}
+				}
+			}
+		case *tcell.EventResize:
+		}
+	}
 }
 
 func extractBranch(line string) string {
