@@ -359,6 +359,13 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 		for i, wt := range worktrees {
 			if wt.AbsPath == gitRoot || strings.HasPrefix(wt.AbsPath, gitRoot+"/") {
 				selected = i
+				_, screenHeight := screen.Size()
+				listHeight := screenHeight - 1
+				windowRatio := 0.75
+				windowHeight := int(float64(listHeight) * windowRatio)
+				if windowHeight > 1 && selected >= windowHeight-1 {
+					windowTop = selected - windowHeight + 1
+				}
 				break
 			}
 		}
@@ -417,6 +424,12 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 		windowHeight := int(float64(listHeight) * windowRatio)
 		if windowHeight < 1 {
 			windowHeight = 1
+		}
+		if windowHeight < len(visible) && selectedIdx >= windowTop+windowHeight {
+			windowTop = selectedIdx - windowHeight + 1
+		}
+		if windowTop < 0 {
+			windowTop = 0
 		}
 		if windowTop+windowHeight > len(visible) {
 			windowTop = len(visible) - windowHeight
