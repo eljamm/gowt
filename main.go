@@ -171,7 +171,7 @@ func (s ConfirmQuitState) HandleKey(e KeyEvent) (State, Action, RenderRequest) {
 // - Option C: Different key to quit (e.g., Ctrl+C)
 
 func main() {
-	var rootCmd = &cobra.Command{
+	rootCmd := &cobra.Command{
 		Use:   "gwt",
 		Short: "Git Worktree Manager",
 		Run:   func(cmd *cobra.Command, args []string) { runJump(cmd, args) },
@@ -417,7 +417,13 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 				if x+numDigits+3 >= width {
 					break
 				}
-				screen.SetContent(x+numDigits+3, height-1, r, nil, tcell.StyleDefault.Background(filterBg).Foreground(filterFg))
+				screen.SetContent(
+					x+numDigits+3,
+					height-1,
+					r,
+					nil,
+					tcell.StyleDefault.Background(filterBg).Foreground(filterFg),
+				)
 			}
 		} else if req.ModeIndicator == " ? " {
 			prompt := "[Y/Enter] yes / [N/ESC] no"
@@ -713,7 +719,16 @@ func getWorktreesSorted(commander GitCommander) ([]WorktreeInfo, error) {
 				commit = fields[1]
 			}
 			branch := extractBranch(line)
-			lineInfos = append(lineInfos, lineInfo{absPath: absPath, name: name, commit: commit, branch: branch, isCwd: isCwd})
+			lineInfos = append(
+				lineInfos,
+				lineInfo{
+					absPath: absPath,
+					name:    name,
+					commit:  commit,
+					branch:  branch,
+					isCwd:   isCwd,
+				},
+			)
 		}
 	}
 
@@ -761,4 +776,5 @@ func findWorktreePathForBranch(branch string, commander GitCommander) (string, e
 }
 
 func printPath(p string) { fmt.Println(p) }
-func fail(err error)     { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
+
+func fail(err error) { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
