@@ -348,7 +348,7 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 		case " I ":
 			modeStyle = modeStyle.Background(colorInsert)
 		case " ? ":
-			modeStyle = modeStyle.Background(colorQuit).Foreground(colorQuit)
+			modeStyle = modeStyle.Background(colorQuit)
 		}
 
 		for x, r := range req.ModeIndicator {
@@ -379,6 +379,7 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 	var action Action
 	var req RenderRequest
 	state, action, req = state.HandleKey(KeyEvent{})
+	currentQuery := ""
 	draw(req)
 
 	for {
@@ -396,15 +397,15 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 				selected--
 			}
 		case tcell.KeyDown, tcell.KeyCtrlN, tcell.KeyCtrlJ:
-			visible := displayWorktrees("")
+			visible := displayWorktrees(currentQuery)
 			if selected < len(visible)-1 {
 				selected++
 			}
 		}
 
-		// Also handle j/k in normal mode here (states return action for these)
-		if keyEvent.Rune == 'j' || keyEvent.Rune == 'k' {
-			visible := displayWorktrees("")
+		// Handle j/k navigation only in Normal mode
+		if req.ModeIndicator == " N " && (keyEvent.Rune == 'j' || keyEvent.Rune == 'k') {
+			visible := displayWorktrees(currentQuery)
 			if keyEvent.Rune == 'j' && selected < len(visible)-1 {
 				selected++
 			}
@@ -415,6 +416,9 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 
 		var nextState State
 		nextState, action, req = state.HandleKey(keyEvent)
+
+		// Extract query from RenderRequest to use for navigation bounds
+		currentQuery = req.Query
 		state = nextState
 		draw(req)
 
@@ -422,7 +426,7 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 			return -1, fmt.Errorf("cancelled")
 		}
 		if action == ActionSelect {
-			visible := displayWorktrees("")
+			visible := displayWorktrees(currentQuery)
 			selectedIdx := selected
 			if selectedIdx >= len(visible) {
 				selectedIdx = len(visible) - 1
