@@ -5,7 +5,7 @@
   ...
 }@args:
 rec {
-  shells.default = pkgs.mkShellNoCC {
+  shells.default = pkgs.mkShell {
     packages =
       with pkgs;
       [
@@ -21,6 +21,8 @@ rec {
         gotestsum
         gotools
         gotestdox
+
+        gcc
       ]
       ++ aliases;
 
