@@ -59,6 +59,20 @@ var defaultCommander GitCommander = &realGitCommander{}
 
 Use `setCommander(mock)` in tests to inject mock behavior.
 
+## Default Selection
+
+On TUI open, the default selection is determined by:
+
+1. **In root worktree** → select last worktree (bottom of list)
+2. **In non-root worktree** → select root worktree (detected via `gitCommonDir` path matching)
+
+```go
+commonDir, err := commander.gitCommonDir()
+// Find root worktree index by comparing paths
+// If cwd = root → select last index
+// If cwd ≠ root → select root
+```
+
 ## Data Types
 
 ```go

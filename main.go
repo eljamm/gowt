@@ -338,10 +338,10 @@ func runRemove(cmd *cobra.Command, args []string) {
 // --- Helpers ---
 
 func selectWorktree(worktrees []WorktreeInfo) (int, error) {
-	return selectWorktreeTUI(worktrees)
+	return selectWorktreeTUI(worktrees, defaultCommander)
 }
 
-func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
+func selectWorktreeTUI(worktrees []WorktreeInfo, commander GitCommander) (int, error) {
 	screen, err := tcell.NewScreen()
 	if err != nil {
 		return -1, err
@@ -358,22 +358,41 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 	}
 
 	var state State = InsertState{query: ""}
-	selected := -1
-	windowTop := 0
-	if gitDir, err := defaultCommander.gitCommonDir(); err == nil && gitDir != "" {
-		gitRoot := strings.TrimSuffix(gitDir, "/.git")
+
+	commonDir, err := commander.gitCommonDir()
+	rootIdx := -1
+	if err == nil && len(worktrees) > 0 {
 		for i, wt := range worktrees {
-			if wt.AbsPath == gitRoot || strings.HasPrefix(wt.AbsPath, gitRoot+"/") {
-				selected = i
-				_, screenHeight := screen.Size()
-				listHeight := screenHeight - 1
-				windowRatio := 0.75
-				windowHeight := int(float64(listHeight) * windowRatio)
-				if windowHeight > 1 && selected >= windowHeight-1 {
-					windowTop = selected - windowHeight + 1
-				}
+			gitDir := wt.AbsPath + "/.git"
+			if gitDir == commonDir || strings.HasPrefix(commonDir, gitDir+"/") {
+				rootIdx = i
 				break
 			}
+		}
+	}
+
+	selected := 0
+	windowTop := 0
+	for i, wt := range worktrees {
+		if wt.IsCwd {
+			selected = i
+			break
+		}
+	}
+
+	if rootIdx >= 0 && selected == rootIdx && len(worktrees) > 1 {
+		selected = len(worktrees) - 1
+	} else if rootIdx >= 0 && selected != rootIdx {
+		selected = rootIdx
+	}
+
+	if selected >= 0 {
+		_, screenHeight := screen.Size()
+		listHeight := screenHeight - 1
+		windowRatio := 0.75
+		windowHeight := int(float64(listHeight) * windowRatio)
+		if windowHeight > 1 && selected >= windowHeight-1 {
+			windowTop = selected - windowHeight + 1
 		}
 	}
 
@@ -771,7 +790,7 @@ func (r *realGitCommander) revParse(showToplevel bool) (string, error) {
 }
 
 func (r *realGitCommander) gitCommonDir() (string, error) {
-	out, err := exec.Command("git", "rev-parse", "--git-common-dir").Output()
+	out, err := exec.Command("git", "rev-parse", "--path-format=absolute", "--git-common-dir").Output()
 	if err != nil {
 		return "", err
 	}
