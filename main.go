@@ -333,6 +333,15 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 
 	var state State = InsertState{query: ""}
 	selected := -1
+	if gitDir, err := defaultCommander.gitCommonDir(); err == nil && gitDir != "" {
+		gitRoot := strings.TrimSuffix(gitDir, "/.git")
+		for i, wt := range worktrees {
+			if wt.AbsPath == gitRoot {
+				selected = i
+				break
+			}
+		}
+	}
 
 	numDigits := len(fmt.Sprintf("%d", len(worktrees)))
 	numPad := fmt.Sprintf("%%%dd", numDigits)
@@ -630,6 +639,7 @@ func extractBranch(line string) string {
 type GitCommander interface {
 	worktreeList() (string, error)
 	revParse(showToplevel bool) (string, error)
+	gitCommonDir() (string, error)
 	worktreeRemove(path string, force bool) error
 	worktreeAdd(path, branch string) error
 	worktreeAddNew(path, branch string) error
@@ -651,6 +661,14 @@ func (r *realGitCommander) revParse(showToplevel bool) (string, error) {
 		args = append(args, "--show-toplevel")
 	}
 	out, err := exec.Command("git", args...).Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func (r *realGitCommander) gitCommonDir() (string, error) {
+	out, err := exec.Command("git", "rev-parse", "--git-common-dir").Output()
 	if err != nil {
 		return "", err
 	}
