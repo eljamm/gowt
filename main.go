@@ -350,11 +350,17 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 			startRow = 0
 		}
 
+		arrowStyle := tcell.StyleDefault.Foreground(tcell.ColorRed)
+
 		for i, wt := range visible {
 			row := startRow + i
 			if row >= height-1 {
 				break
 			}
+			if i == selectedIdx {
+				screen.SetContent(0, row, '>', nil, arrowStyle)
+			}
+			screen.SetContent(1, row, ' ', nil, tcell.StyleDefault)
 			style := tcell.StyleDefault
 			if i == selectedIdx {
 				style = style.Background(selectedBg).Foreground(selectedFg)
