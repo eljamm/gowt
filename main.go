@@ -55,6 +55,8 @@ type RenderRequest struct {
 	Selected      int
 	StatusPrompt  string
 	NavDelta      int // -1 for up, +1 for down, 0 for none
+	NavTop        bool
+	NavBottom     bool
 }
 
 type State interface {
@@ -120,6 +122,10 @@ func (s NormalState) HandleKey(e KeyEvent) (State, Action, RenderRequest) {
 		return s, ActionDraw, RenderRequest{ModeIndicator: " N ", NavDelta: 1}
 	case 'k', 'K':
 		return s, ActionDraw, RenderRequest{ModeIndicator: " N ", NavDelta: -1}
+	case 'g':
+		return s, ActionDraw, RenderRequest{ModeIndicator: " N ", NavTop: true}
+	case 'G':
+		return s, ActionDraw, RenderRequest{ModeIndicator: " N ", NavBottom: true}
 	case 'i':
 		return InsertState{query: ""}, ActionDraw, RenderRequest{ModeIndicator: " I ", Query: ""}
 	case 'q', 'Q':
@@ -457,12 +463,22 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 		var nextState State
 		nextState, action, req = state.HandleKey(keyEvent)
 
-		// Handle navigation from state machine (j/k in Normal mode)
-		if req.NavDelta != 0 {
+		// Handle navigation from state machine (j/k/g/G in Normal mode)
+		if req.NavDelta != 0 || req.NavTop || req.NavBottom {
 			visible := displayWorktrees(currentQuery)
-			newSelected := selected + req.NavDelta
-			if newSelected >= 0 && newSelected < len(visible) {
-				selected = newSelected
+			if req.NavTop {
+				selected = 0
+			} else if req.NavBottom {
+				if len(visible) > 0 {
+					selected = len(visible) - 1
+				} else {
+					selected = 0
+				}
+			} else {
+				newSelected := selected + req.NavDelta
+				if newSelected >= 0 && newSelected < len(visible) {
+					selected = newSelected
+				}
 			}
 		}
 
