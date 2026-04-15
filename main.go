@@ -19,11 +19,12 @@ import (
 var (
 	selectedBg  = tcell.ColorWhite
 	selectedFg  = tcell.ColorBlack
-	colorNormal = tcell.ColorDarkCyan
-	colorInsert = tcell.ColorDarkCyan
+	colorNormal = tcell.ColorBlue
+	colorInsert = tcell.ColorGreen
 	colorQuit   = tcell.ColorRed
-	filterBg    = tcell.ColorDarkGray
+	filterBg    = tcell.ColorBlack
 	filterFg    = tcell.ColorWhite
+	modeFg      = tcell.ColorBlack
 )
 
 // TODO: Replace color vars with config-based customization
@@ -214,34 +215,45 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 				style = style.Background(selectedBg).Foreground(selectedFg)
 			}
 			for x, r := range wt.Display {
-				if x >= width {
+				if x+3 >= width {
 					break
 				}
-				screen.SetContent(x, row, r, nil, style)
+				screen.SetContent(x+3, row, r, nil, style)
 			}
 		}
 
-		var statusLine string
-		if currentMode == modeInsert {
-			statusLine = "Filter: " + query
-		} else if confirmQuit {
-			statusLine = "Quit? [ESC] yes / [n] no"
-		} else {
-			statusLine = "NORMAL"
-		}
-
-		style := tcell.StyleDefault.Foreground(colorNormal)
+		var modeChar string
+		var modeStyle tcell.Style
 		if confirmQuit {
-			style = tcell.StyleDefault.Foreground(colorQuit)
+			modeChar = " ? "
+			modeStyle = tcell.StyleDefault.Foreground(colorQuit).Background(tcell.ColorDarkGray)
+		} else if currentMode == modeInsert {
+			modeChar = " I "
+			modeStyle = tcell.StyleDefault.Foreground(modeFg).Background(colorInsert)
+		} else {
+			modeChar = " N "
+			modeStyle = tcell.StyleDefault.Foreground(modeFg).Background(colorNormal)
 		}
+
+		for x, r := range modeChar {
+			screen.SetContent(x, height-1, r, nil, modeStyle)
+		}
+
 		if currentMode == modeInsert {
-			style = style.Background(filterBg).Foreground(filterFg)
-		}
-		for x, r := range statusLine {
-			if x >= width {
-				break
+			for x, r := range query {
+				if x+3 >= width {
+					break
+				}
+				screen.SetContent(x+3, height-1, r, nil, tcell.StyleDefault.Background(filterBg).Foreground(filterFg))
 			}
-			screen.SetContent(x, height-1, r, nil, style)
+		} else if confirmQuit {
+			prompt := "[ESC] yes / [n] no"
+			for x, r := range prompt {
+				if x+3 >= width {
+					break
+				}
+				screen.SetContent(x+3, height-1, r, nil, tcell.StyleDefault.Foreground(colorQuit))
+			}
 		}
 
 		screen.Show()
