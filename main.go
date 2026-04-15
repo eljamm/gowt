@@ -177,8 +177,15 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 			selectedIdx = 0
 		}
 
+		listHeight := height - 1
+		startRow := listHeight - len(visible)
+		if startRow < 0 {
+			startRow = 0
+		}
+
 		for i, wt := range visible {
-			if i >= height-2 {
+			row := startRow + i
+			if row >= height-1 {
 				break
 			}
 			style := tcell.StyleDefault
@@ -189,36 +196,31 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 				if x >= width {
 					break
 				}
-				screen.SetContent(x, i, r, nil, style)
+				screen.SetContent(x, row, r, nil, style)
 			}
 		}
 
+		var statusLine string
 		if currentMode == modeInsert {
-			prompt := "Filter: " + query
-			for x, r := range prompt {
-				if x >= width {
-					break
-				}
-				screen.SetContent(x, height-1, r, nil, tcell.StyleDefault.Background(tcell.ColorDarkGray))
-			}
+			statusLine = "Filter: " + query
+		} else if confirmQuit {
+			statusLine = "Quit? [ESC] yes / [n] no"
+		} else {
+			statusLine = "NORMAL"
 		}
 
-		modeStr := "NORMAL"
-		if currentMode == modeInsert {
-			modeStr = "INSERT"
-		}
+		style := tcell.StyleDefault.Foreground(tcell.ColorDarkCyan)
 		if confirmQuit {
-			modeStr = "QUIT?"
+			style = tcell.StyleDefault.Foreground(tcell.ColorRed)
 		}
-		offset := width - len(modeStr) - 2
-		if offset > 0 {
-			style := tcell.StyleDefault.Foreground(tcell.ColorDarkCyan)
-			if confirmQuit {
-				style = tcell.StyleDefault.Foreground(tcell.ColorRed)
+		if currentMode == modeInsert {
+			style = style.Background(tcell.ColorDarkGray)
+		}
+		for x, r := range statusLine {
+			if x >= width {
+				break
 			}
-			for x, r := range modeStr {
-				screen.SetContent(offset+x, 0, r, nil, style)
-			}
+			screen.SetContent(x, height-1, r, nil, style)
 		}
 
 		screen.Show()
