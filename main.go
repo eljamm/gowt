@@ -58,6 +58,7 @@ type RenderRequest struct {
 	NavTop        bool // g without count
 	NavBottom     bool // G without count
 	NavTarget     int  // 0 = none, 1-based line number
+	NavPage       int  // -1 for ctrl-u (page up), +1 for ctrl-d (page down)
 }
 
 type State interface {
@@ -73,10 +74,15 @@ type InsertState struct {
 func (s InsertState) HandleKey(e KeyEvent) (State, Action, RenderRequest) {
 	switch e.Key {
 	case tcell.KeyUp, tcell.KeyCtrlP, tcell.KeyCtrlK:
-		// Navigation - handled in main loop via returning updated selection
 		return s, ActionDraw, RenderRequest{Query: s.query, ModeIndicator: " I "}
 	case tcell.KeyDown, tcell.KeyCtrlN, tcell.KeyCtrlJ:
 		return s, ActionDraw, RenderRequest{Query: s.query, ModeIndicator: " I "}
+	case tcell.KeyCtrlD:
+		// Page down (half window)
+		return s, ActionDraw, RenderRequest{Query: s.query, ModeIndicator: " I ", NavPage: 1}
+	case tcell.KeyCtrlU:
+		// Page up (half window)
+		return s, ActionDraw, RenderRequest{Query: s.query, ModeIndicator: " I ", NavPage: -1}
 	case tcell.KeyBackspace, tcell.KeyBackspace2:
 		if len(s.query) > 0 {
 			s.query = s.query[:len(s.query)-1]
@@ -113,6 +119,20 @@ func (s NormalState) HandleKey(e KeyEvent) (State, Action, RenderRequest) {
 		return s, ActionDraw, RenderRequest{ModeIndicator: " N "}
 	case tcell.KeyDown, tcell.KeyCtrlN, tcell.KeyCtrlJ:
 		return s, ActionDraw, RenderRequest{ModeIndicator: " N "}
+	case tcell.KeyCtrlD:
+		delta := s.count
+		if delta == 0 {
+			delta = 1
+		}
+		s.count = 0
+		return s, ActionDraw, RenderRequest{ModeIndicator: " N ", NavPage: delta}
+	case tcell.KeyCtrlU:
+		delta := s.count
+		if delta == 0 {
+			delta = 1
+		}
+		s.count = 0
+		return s, ActionDraw, RenderRequest{ModeIndicator: " N ", NavPage: -delta}
 	case tcell.KeyEsc:
 		s.count = 0
 		return ConfirmQuitState{}, ActionDraw, RenderRequest{ModeIndicator: " ? "}
@@ -548,8 +568,8 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 		var nextState State
 		nextState, action, req = state.HandleKey(keyEvent)
 
-		// Handle navigation from state machine (j/k/g/G in Normal mode)
-		if req.NavDelta != 0 || req.NavTop || req.NavBottom || req.NavTarget > 0 {
+		// Handle navigation from state machine (j/k/g/G in Normal mode, Ctrl-d/Ctrl-u)
+		if req.NavDelta != 0 || req.NavTop || req.NavBottom || req.NavTarget > 0 || req.NavPage != 0 {
 			visible := displayWorktrees(currentQuery)
 			if req.NavTop {
 				selected = 0
@@ -568,6 +588,27 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 					targetIdx = len(visible) - 1
 				}
 				selected = targetIdx
+			} else if req.NavPage != 0 {
+				_, screenHeight := screen.Size()
+				listHeight := screenHeight - 1
+				windowRatio := 0.75
+				windowHeight := int(float64(listHeight) * windowRatio)
+				if windowHeight < 1 {
+					windowHeight = 1
+				}
+				halfPage := windowHeight / 2
+				if halfPage < 1 {
+					halfPage = 1
+				}
+				pageDelta := halfPage * req.NavPage
+				newSelected := selected + pageDelta
+				if newSelected >= len(visible) {
+					selected = len(visible) - 1
+				} else if newSelected < 0 {
+					selected = 0
+				} else {
+					selected = newSelected
+				}
 			} else {
 				newSelected := selected + req.NavDelta
 				if req.NavDelta > 0 {
