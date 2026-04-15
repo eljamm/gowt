@@ -247,7 +247,7 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 				screen.SetContent(x+3, height-1, r, nil, tcell.StyleDefault.Background(filterBg).Foreground(filterFg))
 			}
 		} else if confirmQuit {
-			prompt := "[Y/ESC] yes / [N] no"
+			prompt := "[Y/Enter] yes / [N/ESC] no"
 			for x, r := range prompt {
 				if x+3 >= width {
 					break
@@ -268,6 +268,9 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 			switch ev.Key() {
 			case tcell.KeyEnter:
 				visible := displayWorktrees()
+				if confirmQuit {
+					return -1, fmt.Errorf("cancelled")
+				}
 				selectedIdx := selected
 				if selectedIdx >= len(visible) {
 					selectedIdx = len(visible) - 1
@@ -291,7 +294,7 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 						currentMode = modeNormal
 					}
 				} else if confirmQuit {
-					return -1, fmt.Errorf("cancelled")
+					confirmQuit = false
 				} else {
 					confirmQuit = true
 				}
