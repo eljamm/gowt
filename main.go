@@ -15,6 +15,27 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// UI Colors
+var (
+	selectedBg  = tcell.ColorWhite
+	selectedFg  = tcell.ColorBlack
+	colorNormal = tcell.ColorDarkCyan
+	colorInsert = tcell.ColorDarkCyan
+	colorQuit   = tcell.ColorRed
+	filterBg    = tcell.ColorDarkGray
+	filterFg    = tcell.ColorWhite
+)
+
+// TODO: Replace color vars with config-based customization
+// - Add UIConfig struct with color fields
+// - Support loading from env vars or config file
+// - Allow runtime customization via flags
+
+// TODO: Make ESC behavior configurable
+// - Option A: ESC immediately quits (fzf-like)
+// - Option B: Current confirmation prompt
+// - Option C: Different key to quit (e.g., Ctrl+C)
+
 func main() {
 	var rootCmd = &cobra.Command{
 		Use:   "gwt",
@@ -190,7 +211,7 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 			}
 			style := tcell.StyleDefault
 			if i == selectedIdx {
-				style = style.Reverse(true)
+				style = style.Background(selectedBg).Foreground(selectedFg)
 			}
 			for x, r := range wt.Display {
 				if x >= width {
@@ -209,12 +230,12 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 			statusLine = "NORMAL"
 		}
 
-		style := tcell.StyleDefault.Foreground(tcell.ColorDarkCyan)
+		style := tcell.StyleDefault.Foreground(colorNormal)
 		if confirmQuit {
-			style = tcell.StyleDefault.Foreground(tcell.ColorRed)
+			style = tcell.StyleDefault.Foreground(colorQuit)
 		}
 		if currentMode == modeInsert {
-			style = style.Background(tcell.ColorDarkGray)
+			style = style.Background(filterBg).Foreground(filterFg)
 		}
 		for x, r := range statusLine {
 			if x >= width {
