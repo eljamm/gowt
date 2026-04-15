@@ -292,6 +292,9 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 	var state State = InsertState{query: ""}
 	selected := 0
 
+	numDigits := len(fmt.Sprintf("%d", len(worktrees)))
+	numPad := fmt.Sprintf("%%%dd", numDigits)
+
 	displayWorktrees := func(query string) []matchedWorktree {
 		if query == "" {
 			result := make([]matchedWorktree, len(worktrees))
@@ -345,6 +348,7 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 		}
 
 		arrowStyle := tcell.StyleDefault.Foreground(arrowFg)
+		numberStyle := tcell.StyleDefault.Foreground(tcell.ColorDarkGray)
 
 		for i, wt := range visible {
 			row := startRow + i
@@ -355,12 +359,22 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 				screen.SetContent(0, row, '>', nil, arrowStyle)
 			}
 			screen.SetContent(1, row, ' ', nil, tcell.StyleDefault)
+
+			numStr := fmt.Sprintf(numPad, i+1)
+			for x, r := range numStr {
+				if x+2 >= width {
+					break
+				}
+				screen.SetContent(x+2, row, r, nil, numberStyle)
+			}
+			numberEnd := 2 + numDigits
+
 			style := tcell.StyleDefault
 			if i == selectedIdx {
 				style = style.Background(selectedBg).Foreground(selectedFg).Bold(true)
 			}
 			for x, r := range wt.Display {
-				if x+3 >= width {
+				if x+numberEnd+1 >= width {
 					break
 				}
 				charStyle := style
@@ -374,7 +388,7 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 						break
 					}
 				}
-				screen.SetContent(x+3, row, r, nil, charStyle)
+				screen.SetContent(x+numberEnd+1, row, r, nil, charStyle)
 			}
 		}
 
@@ -394,18 +408,18 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 
 		if req.ModeIndicator == " I " {
 			for x, r := range req.Query {
-				if x+3 >= width {
+				if x+numDigits+3 >= width {
 					break
 				}
-				screen.SetContent(x+3, height-1, r, nil, tcell.StyleDefault.Background(filterBg).Foreground(filterFg))
+				screen.SetContent(x+numDigits+3, height-1, r, nil, tcell.StyleDefault.Background(filterBg).Foreground(filterFg))
 			}
 		} else if req.ModeIndicator == " ? " {
 			prompt := "[Y/Enter] yes / [N/ESC] no"
 			for x, r := range prompt {
-				if x+3 >= width {
+				if x+numDigits+3 >= width {
 					break
 				}
-				screen.SetContent(x+3, height-1, r, nil, tcell.StyleDefault.Foreground(colorQuit))
+				screen.SetContent(x+numDigits+3, height-1, r, nil, tcell.StyleDefault.Foreground(colorQuit))
 			}
 		}
 
