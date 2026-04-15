@@ -18,15 +18,17 @@ import (
 
 // UI Colors
 var (
-	selectedBg  = tcell.ColorWhite
-	selectedFg  = tcell.ColorBlack
-	colorNormal = tcell.ColorBlue
-	colorInsert = tcell.ColorGreen
-	colorQuit   = tcell.ColorRed
-	filterBg    = tcell.ColorBlack
-	filterFg    = tcell.ColorWhite
-	modeFg      = tcell.ColorBlack
-	highlightFg = tcell.ColorYellow
+	selectedBg     = tcell.NewRGBColor(73, 77, 100)
+	selectedFg     = tcell.NewRGBColor(249, 226, 175)
+	colorNormal    = tcell.ColorBlue
+	colorInsert    = tcell.ColorGreen
+	colorQuit      = tcell.ColorRed
+	filterBg       = tcell.ColorBlack
+	filterFg       = tcell.ColorWhite
+	modeFg         = tcell.ColorBlack
+	highlightSelFg = tcell.NewRGBColor(107, 200, 122)
+	highlightFg    = tcell.NewRGBColor(166, 227, 161)
+	arrowFg        = tcell.ColorRed
 )
 
 // State Machine Types
@@ -350,7 +352,7 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 			startRow = 0
 		}
 
-		arrowStyle := tcell.StyleDefault.Foreground(tcell.ColorRed)
+		arrowStyle := tcell.StyleDefault.Foreground(arrowFg)
 
 		for i, wt := range visible {
 			row := startRow + i
@@ -363,7 +365,7 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 			screen.SetContent(1, row, ' ', nil, tcell.StyleDefault)
 			style := tcell.StyleDefault
 			if i == selectedIdx {
-				style = style.Background(selectedBg).Foreground(selectedFg)
+				style = style.Background(selectedBg).Foreground(selectedFg).Bold(true)
 			}
 			for x, r := range wt.Display {
 				if x+3 >= width {
@@ -372,9 +374,10 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 				charStyle := style
 				for _, pos := range wt.MatchPositions {
 					if x >= pos[0] && x < pos[1] {
-						charStyle = style.Foreground(highlightFg)
 						if i == selectedIdx {
-							charStyle = charStyle.Background(selectedBg)
+							charStyle = style.Foreground(highlightSelFg).Bold(true)
+						} else {
+							charStyle = style.Foreground(highlightFg)
 						}
 						break
 					}
