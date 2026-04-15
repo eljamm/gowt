@@ -311,20 +311,15 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 			return []matchedWorktree{}
 		}
 
-		matchedSet := make(map[int]struct{}, len(matched))
-		for _, m := range matched {
-			matchedSet[m.Idx] = struct{}{}
-		}
-
 		result := make([]matchedWorktree, 0, len(matched))
-		for i, wt := range worktrees {
-			if _, ok := matchedSet[i]; ok {
-				positions := fuzzyMatchPositions(query, wt.Display)
-				result = append(result, matchedWorktree{
-					WorktreeInfo:   wt,
-					MatchPositions: positions,
-				})
-			}
+		for i := len(matched) - 1; i >= 0; i-- {
+			m := matched[i]
+			wt := worktrees[m.Idx]
+			positions := fuzzyMatchPositions(query, wt.Display)
+			result = append(result, matchedWorktree{
+				WorktreeInfo:   wt,
+				MatchPositions: positions,
+			})
 		}
 		return result
 	}
