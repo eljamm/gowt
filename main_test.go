@@ -11,6 +11,8 @@ type mockGitCommander struct {
 	worktreeListErr    error
 	revParseOutput     string
 	revParseErr        error
+	gitCommonDirOutput string
+	gitCommonDirErr    error
 	worktreeRemoveErr  error
 	worktreeAddErr     error
 	worktreeAddNewErr  error
@@ -22,6 +24,10 @@ func (m *mockGitCommander) worktreeList() (string, error) {
 
 func (m *mockGitCommander) revParse(showToplevel bool) (string, error) {
 	return m.revParseOutput, m.revParseErr
+}
+
+func (m *mockGitCommander) gitCommonDir() (string, error) {
+	return m.gitCommonDirOutput, m.gitCommonDirErr
 }
 
 func (m *mockGitCommander) worktreeRemove(path string, force bool) error {
