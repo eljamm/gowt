@@ -452,6 +452,40 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 			}
 		}
 
+		// Handle query changes: track the most relevant match or preserve selection on clear
+		if currentQuery != req.Query {
+			oldVisible := displayWorktrees(currentQuery)
+			newVisible := displayWorktrees(req.Query)
+
+			var selectedPath string
+			if len(oldVisible) > 0 {
+				clamped := selected
+				if clamped >= len(oldVisible) {
+					clamped = len(oldVisible) - 1
+				}
+				if clamped < 0 {
+					clamped = 0
+				}
+				selectedPath = oldVisible[clamped].AbsPath
+			}
+
+			if len(newVisible) > 0 {
+				if req.Query == "" {
+					selected = 0
+					for i, wt := range newVisible {
+						if wt.AbsPath == selectedPath {
+							selected = i
+							break
+						}
+					}
+				} else {
+					selected = len(newVisible) - 1
+				}
+			} else {
+				selected = 0
+			}
+		}
+
 		// Extract query from RenderRequest to use for navigation bounds
 		currentQuery = req.Query
 		state = nextState
