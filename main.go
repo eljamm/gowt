@@ -444,8 +444,16 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 			modeStyle = modeStyle.Background(colorQuit)
 		}
 
-		for x, r := range req.ModeIndicator {
-			screen.SetContent(x, height-1, r, nil, modeStyle)
+		leftWidth := 2 + numDigits
+		offset := (leftWidth + 1) % 2
+		modeRunes := []rune(req.ModeIndicator)
+		modeStyle = modeStyle.Bold(true)
+		for col := 0; col < leftWidth; col++ {
+			idx := col - offset
+			if idx < 0 || idx >= len(modeRunes) {
+				continue
+			}
+			screen.SetContent(col, height-1, modeRunes[idx], nil, modeStyle)
 		}
 
 		if req.ModeIndicator == " I " {
