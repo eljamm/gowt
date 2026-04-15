@@ -308,24 +308,21 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 
 		matched := matching.FindAll(query, displayStrs, matching.WithMode(matching.ModeSmart))
 		if len(matched) == 0 {
-			result := make([]matchedWorktree, len(worktrees))
-			for i, wt := range worktrees {
-				result[i] = matchedWorktree{WorktreeInfo: wt}
-			}
-			return result
+			return []matchedWorktree{}
 		}
 
-		matchedMap := make(map[int][2]int, len(matched))
+		matchedSet := make(map[int]struct{}, len(matched))
 		for _, m := range matched {
-			matchedMap[m.Idx] = m.Pos
+			matchedSet[m.Idx] = struct{}{}
 		}
 
 		result := make([]matchedWorktree, 0, len(matched))
 		for i, wt := range worktrees {
-			if pos, ok := matchedMap[i]; ok {
+			if _, ok := matchedSet[i]; ok {
+				positions := fuzzyMatchPositions(query, wt.Display)
 				result = append(result, matchedWorktree{
 					WorktreeInfo:   wt,
-					MatchPositions: [][2]int{pos},
+					MatchPositions: positions,
 				})
 			}
 		}
@@ -578,6 +575,32 @@ type WorktreeInfo struct {
 type matchedWorktree struct {
 	WorktreeInfo
 	MatchPositions [][2]int
+}
+
+func fuzzyMatchPositions(query, target string) [][2]int {
+	if query == "" {
+		return nil
+	}
+	queryLower := strings.ToLower(query)
+	targetLower := strings.ToLower(target)
+	var positions [][2]int
+	targetRunes := []rune(targetLower)
+	targetIdx := 0
+	for _, q := range queryLower {
+		found := false
+		for ; targetIdx < len(targetRunes); targetIdx++ {
+			if targetRunes[targetIdx] == q {
+				positions = append(positions, [2]int{targetIdx, targetIdx + 1})
+				targetIdx++
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil
+		}
+	}
+	return positions
 }
 
 func getWorktreesSorted(commander GitCommander) ([]WorktreeInfo, error) {
