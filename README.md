@@ -1,10 +1,20 @@
 ## What
 
-Vibe rewrite of <https://github.com/gko/gwt/blob/master/gwt.sh>
+**gowt** is a fuzzy TUI for managing git worktrees. Select a worktree and instantly jump to it.
+
+Vibe rewrite of [gko/gwt](https://github.com/gko/gwt/blob/master/gwt.sh).
 
 > [!WARNING]
-> This project is mainly for experimenting with LLMs and to scratch a personal itch.
-> If you're interested in a tool like this, use the project mentioned above, instead.
+> This project is for experimenting with LLMs and to scratch a personal itch.
+> As such, it's understandable if you don't want to use it, and you should
+> check out the original project, instead.
+
+## Features
+
+- Fuzzy filtering to quickly find worktrees
+- Vim-style navigation (j/k, g/G, Ctrl-d/Ctrl-u)
+- Auto-cd to selected worktree with shell wrapper
+- Auto-selects root worktree when launching from other worktrees
 
 ## Usage
 
