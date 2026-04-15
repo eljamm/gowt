@@ -305,15 +305,17 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 						selected = 0
 					}
 				}
-			case tcell.KeyDown, tcell.KeyCtrlN:
+			case tcell.KeyDown, tcell.KeyCtrlN, tcell.KeyCtrlJ:
 				visible := displayWorktrees()
 				if selected < len(visible)-1 {
 					selected++
 				}
-			case tcell.KeyUp, tcell.KeyCtrlP:
+			case tcell.KeyUp, tcell.KeyCtrlP, tcell.KeyCtrlK:
 				if selected > 0 {
 					selected--
 				}
+			case tcell.KeyCtrlC:
+				return -1, fmt.Errorf("cancelled")
 			}
 			switch ev.Rune() {
 			case 'j':
@@ -333,6 +335,7 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 				if currentMode == modeNormal && !confirmQuit {
 					currentMode = modeInsert
 				}
+				fallthrough
 			case 'n', 'N':
 				if confirmQuit {
 					confirmQuit = false
@@ -342,9 +345,11 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 					return -1, fmt.Errorf("cancelled")
 				}
 			case 'q', 'Q':
-				if !confirmQuit {
+				if !confirmQuit && currentMode == modeNormal {
 					return -1, fmt.Errorf("cancelled")
 				}
+			case 'p', 'P':
+				// Don't add to query - could be stray Ctrl-P in some terminals
 			case 0:
 				// Non-printable characters (e.g., ESC) - do nothing
 			default:
