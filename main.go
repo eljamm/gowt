@@ -163,7 +163,7 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 		modeInsert
 	)
 
-	currentMode := modeNormal
+	currentMode := modeInsert
 	selected := 0
 	query := ""
 	confirmQuit := false
@@ -226,7 +226,7 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 		var modeStyle tcell.Style
 		if confirmQuit {
 			modeChar = " ? "
-			modeStyle = tcell.StyleDefault.Foreground(colorQuit).Background(tcell.ColorDarkGray)
+			modeStyle = tcell.StyleDefault.Foreground(modeFg).Background(colorQuit)
 		} else if currentMode == modeInsert {
 			modeChar = " I "
 			modeStyle = tcell.StyleDefault.Foreground(modeFg).Background(colorInsert)
@@ -247,7 +247,7 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 				screen.SetContent(x+3, height-1, r, nil, tcell.StyleDefault.Background(filterBg).Foreground(filterFg))
 			}
 		} else if confirmQuit {
-			prompt := "[ESC] yes / [n] no"
+			prompt := "[Y/ESC] yes / [N] no"
 			for x, r := range prompt {
 				if x+3 >= width {
 					break
@@ -285,9 +285,11 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 				return selected, nil
 			case tcell.KeyEsc:
 				if currentMode == modeInsert {
-					currentMode = modeNormal
-					query = ""
-					selected = 0
+					if len(query) > 0 {
+						query = ""
+					} else {
+						currentMode = modeNormal
+					}
 				} else if confirmQuit {
 					return -1, fmt.Errorf("cancelled")
 				} else {
@@ -328,11 +330,15 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 				if currentMode == modeNormal && !confirmQuit {
 					currentMode = modeInsert
 				}
-			case 'n':
+			case 'n', 'N':
 				if confirmQuit {
 					confirmQuit = false
 				}
-			case 'q':
+			case 'y', 'Y':
+				if confirmQuit {
+					return -1, fmt.Errorf("cancelled")
+				}
+			case 'q', 'Q':
 				if !confirmQuit {
 					return -1, fmt.Errorf("cancelled")
 				}
