@@ -543,6 +543,9 @@ func selectWorktreeTUI(worktrees []WorktreeInfo) (int, error) {
 	state, action, req = state.HandleKey(KeyEvent{})
 	currentQuery := ""
 	draw(req)
+	if selected < 0 {
+		selected = len(worktrees) - 1
+	}
 
 	for {
 		ev := screen.PollEvent()
