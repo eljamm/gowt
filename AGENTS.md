@@ -24,6 +24,7 @@ Fuzzy TUI for managing git worktrees. Single-file Go app with tcell, state machi
 |nix-packaging.md: Nix build, shell wrappers, NixOS/Home Manager integration
 |testing.md: Go testing, GitCommander mocking, nix flake check
 |doc-migration.md: how to keep AGENTS.md lean
+|recording.md: vhs tape recording for README demos
 
 ## Core Rules
 
