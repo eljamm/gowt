@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/gdamore/tcell/v2"
+
+	"gwt/internal/git"
 )
 
 type mockGitCommander struct {
@@ -152,9 +154,9 @@ func TestGetWorktreesSorted(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			commander := &mockGitCommander{
-				worktreeListOutput: tt.worktreeOutput,
-				revParseOutput:     tt.gitRoot,
+			commander := &git.MockCommander{
+				WorktreeListOutput: tt.worktreeOutput,
+				RevParseOutput:     tt.gitRoot,
 			}
 
 			result, err := getWorktreesSorted(commander)
@@ -308,9 +310,9 @@ func TestFindWorktreePathForBranch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			commander := &mockGitCommander{
-				worktreeListOutput: tt.worktreeOutput,
-				revParseOutput:     tt.gitRoot,
+			commander := &git.MockCommander{
+				WorktreeListOutput: tt.worktreeOutput,
+				RevParseOutput:     tt.gitRoot,
 			}
 
 			path, err := findWorktreePathForBranch(tt.branch, commander)

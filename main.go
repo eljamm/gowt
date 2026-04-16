@@ -14,6 +14,8 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/ktr0731/go-fuzzyfinder/matching"
 	"github.com/spf13/cobra"
+
+	"gwt/internal/git"
 )
 
 // UI Colors
@@ -33,7 +35,7 @@ var (
 
 const windowRatio = 0.75
 
-var defaultCommander GitCommander = &realGitCommander{}
+var defaultCommander git.Commander = &git.RealCommander{}
 
 type Action int
 
@@ -257,7 +259,7 @@ func main() {
 
 // --- Handlers ---
 
-func runJump(cmd *cobra.Command, args []string, commander GitCommander) {
+func runJump(cmd *cobra.Command, args []string, commander git.Commander) {
 	if len(args) > 0 {
 		path, err := findWorktreePathForBranch(args[0], commander)
 		if err != nil {
@@ -283,7 +285,7 @@ func runJump(cmd *cobra.Command, args []string, commander GitCommander) {
 	printPath(worktrees[idx].AbsPath)
 }
 
-func runAdd(cmd *cobra.Command, args []string, commander GitCommander) {
+func runAdd(cmd *cobra.Command, args []string, commander git.Commander) {
 	branch := args[0]
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -293,14 +295,14 @@ func runAdd(cmd *cobra.Command, args []string, commander GitCommander) {
 	sanitized := strings.ReplaceAll(branch, "/", "_")
 	newPath := filepath.Join("..", repoName+"_"+sanitized)
 
-	if err := commander.worktreeAdd(newPath, branch); err != nil {
+	if err := commander.WorktreeAdd(newPath, branch); err != nil {
 		fmt.Fprintf(os.Stderr, "Branch not found. Create '%s'? [y/N] ", branch)
 		res, err := bufio.NewReader(os.Stdin).ReadString('\n')
 		if err != nil {
 			fail(fmt.Errorf("failed to read input: %w", err))
 		}
 		if strings.EqualFold(strings.TrimSpace(res), "y") {
-			if err := commander.worktreeAddNew(newPath, branch); err != nil {
+			if err := commander.WorktreeAddNew(newPath, branch); err != nil {
 				fail(fmt.Errorf("failed to create worktree: %w", err))
 			}
 		} else {
@@ -310,7 +312,7 @@ func runAdd(cmd *cobra.Command, args []string, commander GitCommander) {
 	printPath(newPath)
 }
 
-func runRemove(cmd *cobra.Command, args []string, commander GitCommander) {
+func runRemove(cmd *cobra.Command, args []string, commander git.Commander) {
 	worktrees, err := getWorktreesSorted(commander)
 	if err != nil {
 		fail(err)
@@ -326,11 +328,11 @@ func runRemove(cmd *cobra.Command, args []string, commander GitCommander) {
 
 	path := worktrees[idx].AbsPath
 	force, _ := cmd.Flags().GetBool("force")
-	if err := commander.worktreeRemove(path, force); err != nil {
+	if err := commander.WorktreeRemove(path, force); err != nil {
 		fail(err)
 	}
 
-	gitRoot, err := commander.revParse(true)
+	gitRoot, err := commander.RevParse(true)
 	if err != nil {
 		fail(fmt.Errorf("failed to get git root: %w", err))
 	}
@@ -339,11 +341,11 @@ func runRemove(cmd *cobra.Command, args []string, commander GitCommander) {
 
 // --- Helpers ---
 
-func selectWorktree(worktrees []WorktreeInfo, commander GitCommander) (int, error) {
+func selectWorktree(worktrees []WorktreeInfo, commander git.Commander) (int, error) {
 	return selectWorktreeTUI(worktrees, commander)
 }
 
-func selectWorktreeTUI(worktrees []WorktreeInfo, commander GitCommander) (int, error) {
+func selectWorktreeTUI(worktrees []WorktreeInfo, commander git.Commander) (int, error) {
 	screen, err := tcell.NewScreen()
 	if err != nil {
 		return -1, err
@@ -361,7 +363,7 @@ func selectWorktreeTUI(worktrees []WorktreeInfo, commander GitCommander) (int, e
 
 	var state State = InsertState{query: ""}
 
-	commonDir, err := commander.gitCommonDir()
+	commonDir, err := commander.GitCommonDir()
 	rootIdx := -1
 	if err == nil && len(worktrees) > 0 {
 		for i, wt := range worktrees {
@@ -836,8 +838,8 @@ func fuzzyMatchPositions(query, target string) [][2]int {
 	return positions
 }
 
-func getWorktreesSorted(commander GitCommander) ([]WorktreeInfo, error) {
-	out, err := commander.worktreeList()
+func getWorktreesSorted(commander git.Commander) ([]WorktreeInfo, error) {
+	out, err := commander.WorktreeList()
 	if err != nil {
 		return nil, fmt.Errorf("failed to list worktrees: %w", err)
 	}
@@ -858,7 +860,7 @@ func getWorktreesSorted(commander GitCommander) ([]WorktreeInfo, error) {
 		return nil, fmt.Errorf("failed to resolve symlinks: %w", err)
 	}
 
-	gitRoot, err := commander.revParse(true)
+	gitRoot, err := commander.RevParse(true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get git root: %w", err)
 	}
@@ -930,7 +932,7 @@ func getWorktreesSorted(commander GitCommander) ([]WorktreeInfo, error) {
 	return result, nil
 }
 
-func findWorktreePathForBranch(branch string, commander GitCommander) (string, error) {
+func findWorktreePathForBranch(branch string, commander git.Commander) (string, error) {
 	wts, err := getWorktreesSorted(commander)
 	if err != nil {
 		return "", fmt.Errorf("failed to get worktrees: %w", err)
