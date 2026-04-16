@@ -1,10 +1,13 @@
-###---------------###
-###  GitHub: Nix  ###
-###---------------###
+## Nix ##
 
-# Ignore build outputs from performing a nix-build or `nix build` command
-result
-result-*
+# build outputs (nix-build or `nix build`)
+result*
 
-# Ignore automatically generated direnv output
+# https://direnv.net
+# https://github.com/nix-community/nix-direnv
 .direnv
+
+## Misc ##
+
+# worktrees (used for demo)
+.wt

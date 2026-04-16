@@ -20,7 +20,12 @@ buildGoModule (finalAttrs: {
       let
         base = baseNameOf (toString name);
       in
-      (type == "directory" || lib.hasSuffix ".go" base || base == "go.mod" || base == "go.sum");
+      (
+        (type == "directory" && base != ".wt")
+        || lib.hasSuffix ".go" base
+        || base == "go.mod"
+        || base == "go.sum"
+      );
   };
 
   vendorHash = "sha256-CJLTDn/ib2htab3gpyEYbAFq3iEjvc1nJ+2eqO9pYqE=";
@@ -31,6 +36,8 @@ buildGoModule (finalAttrs: {
   propagatedBuildInputs = [ git ];
 
   ldflags = [ "-s" ];
+
+  meta.mainProgram = "gwt";
 
   postInstall = ''
     # Generate completions
