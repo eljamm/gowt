@@ -11,6 +11,10 @@ Vibe rewrite of [gko/gwt](https://github.com/gko/gwt/blob/master/gwt.sh).
 
 ## Features
 
+<p align="center">
+  <video src="https://github.com/eljamm/gowt/raw/refs/heads/dev/docs/demo/recording.mp4" autoplay loop muted playsinline width="600"></video>
+</p>
+
 - Fuzzy filtering to quickly find worktrees
 - Vim-style navigation (j/k, g/G, Ctrl-d/Ctrl-u)
 - Auto-cd to selected worktree with shell wrapper
@@ -78,7 +82,7 @@ Press `q` or `Q` in Normal mode to enter confirm mode.
 If you have [Nix](https://nixos.org) installed, you can run this tool without installing it:
 
 ```shellSession
-nix run github:eljamm/gowt
+cd $(nix run github:eljamm/gowt#gwt)
 ```
 
 ## Install (Nix)
@@ -96,7 +100,7 @@ Add the package to your nix flake inputs:
 }
 ```
 
-#### standalone
+#### NixOS
 
 Use the following module in your NixOS system:
 
@@ -127,7 +131,7 @@ After rebuilding and switching your system, the tool will be available:
 gwt
 ```
 
-#### home-manager
+#### Home Manager
 
 Use the following configuration, depending on which shell you want:
 
@@ -157,7 +161,7 @@ Use the following configuration, depending on which shell you want:
 
 Requires Go 1.21+.
 
-```shell
+```shellSession
 git clone https://github.com/eljamm/gowt.git
 cd gowt
 go install
@@ -166,12 +170,19 @@ go install
 The binary will be installed to `$GOBIN` (defaults to `$GOPATH/bin` or `$HOME/go/bin`).
 Make sure that directory is in your `PATH`.
 
-The binary prints the path to the selected worktree.
-To automatically `cd` into it, you need a shell wrapper.
+The binary prints the path to the selected worktree, so to switch into it run:
+
+```shellSession
+cd $(gwt)
+```
+
+Or, to automatically do this, set up a shell wrapper as instructed, below.
 
 ### Shell Wrapper
 
 Add the following to your shell config:
+
+<!-- TODO: automate from Nix pacakge -->
 
 **Bash** (add to `~/.bashrc`):
 
@@ -215,8 +226,8 @@ function gwt
 end
 ```
 
-Or run without installing:
+Restart your shell, and then switching worktrees will be as easy as:
 
-```shell
-go run .
+```shellSession
+gwt
 ```
