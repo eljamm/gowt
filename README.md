@@ -11,9 +11,9 @@ Vibe rewrite of [gko/gwt](https://github.com/gko/gwt/blob/master/gwt.sh).
 
 ## Features
 
-<p align="center">
-  <video src="https://github.com/eljamm/gowt/raw/refs/heads/dev/docs/demo/recording.mp4" autoplay loop muted playsinline width="600"></video>
-</p>
+<div align="center">
+  <video src="https://github.com/user-attachments/assets/7c878219-5c28-4bc5-9be1-55b0eb7536f2"></video>
+</div>
 
 - Fuzzy filtering to quickly find worktrees
 - Vim-style navigation (j/k, g/G, Ctrl-d/Ctrl-u)
