@@ -33,7 +33,7 @@ var (
 
 const windowRatio = 0.75
 
-// State Machine Types
+var defaultCommander GitCommander = &realGitCommander{}
 
 type Action int
 
@@ -232,20 +232,20 @@ func main() {
 	rootCmd := &cobra.Command{
 		Use:   "gwt",
 		Short: "Git Worktree Manager",
-		Run:   func(cmd *cobra.Command, args []string) { runJump(cmd, args) },
+		Run:   func(cmd *cobra.Command, args []string) { runJump(cmd, args, defaultCommander) },
 	}
 
 	rootCmd.AddCommand(&cobra.Command{
 		Use:   "add [branch]",
 		Short: "Create a worktree from a branch",
 		Args:  cobra.ExactArgs(1),
-		Run:   runAdd,
+		Run:   func(cmd *cobra.Command, args []string) { runAdd(cmd, args, defaultCommander) },
 	})
 
 	removeCmd := &cobra.Command{
 		Use:   "remove",
 		Short: "Interactively remove a worktree",
-		Run:   func(cmd *cobra.Command, args []string) { runRemove(cmd, args) },
+		Run:   func(cmd *cobra.Command, args []string) { runRemove(cmd, args, defaultCommander) },
 	}
 	removeCmd.Flags().BoolP("force", "f", false, "Force removal")
 	rootCmd.AddCommand(removeCmd)
@@ -257,9 +257,9 @@ func main() {
 
 // --- Handlers ---
 
-func runJump(cmd *cobra.Command, args []string) {
+func runJump(cmd *cobra.Command, args []string, commander GitCommander) {
 	if len(args) > 0 {
-		path, err := findWorktreePathForBranch(args[0], defaultCommander)
+		path, err := findWorktreePathForBranch(args[0], commander)
 		if err != nil {
 			fail(err)
 		}
@@ -267,12 +267,12 @@ func runJump(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	worktrees, err := getWorktreesSorted(defaultCommander)
+	worktrees, err := getWorktreesSorted(commander)
 	if err != nil {
 		fail(err)
 	}
 
-	idx, err := selectWorktree(worktrees)
+	idx, err := selectWorktree(worktrees, commander)
 	if err != nil {
 		fail(err)
 	}
@@ -283,7 +283,7 @@ func runJump(cmd *cobra.Command, args []string) {
 	printPath(worktrees[idx].AbsPath)
 }
 
-func runAdd(cmd *cobra.Command, args []string) {
+func runAdd(cmd *cobra.Command, args []string, commander GitCommander) {
 	branch := args[0]
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -293,14 +293,14 @@ func runAdd(cmd *cobra.Command, args []string) {
 	sanitized := strings.ReplaceAll(branch, "/", "_")
 	newPath := filepath.Join("..", repoName+"_"+sanitized)
 
-	if err := defaultCommander.worktreeAdd(newPath, branch); err != nil {
+	if err := commander.worktreeAdd(newPath, branch); err != nil {
 		fmt.Fprintf(os.Stderr, "Branch not found. Create '%s'? [y/N] ", branch)
 		res, err := bufio.NewReader(os.Stdin).ReadString('\n')
 		if err != nil {
 			fail(fmt.Errorf("failed to read input: %w", err))
 		}
 		if strings.EqualFold(strings.TrimSpace(res), "y") {
-			if err := defaultCommander.worktreeAddNew(newPath, branch); err != nil {
+			if err := commander.worktreeAddNew(newPath, branch); err != nil {
 				fail(fmt.Errorf("failed to create worktree: %w", err))
 			}
 		} else {
@@ -310,13 +310,13 @@ func runAdd(cmd *cobra.Command, args []string) {
 	printPath(newPath)
 }
 
-func runRemove(cmd *cobra.Command, args []string) {
-	worktrees, err := getWorktreesSorted(defaultCommander)
+func runRemove(cmd *cobra.Command, args []string, commander GitCommander) {
+	worktrees, err := getWorktreesSorted(commander)
 	if err != nil {
 		fail(err)
 	}
 
-	idx, err := selectWorktree(worktrees)
+	idx, err := selectWorktree(worktrees, commander)
 	if err != nil {
 		fail(err)
 	}
@@ -326,11 +326,11 @@ func runRemove(cmd *cobra.Command, args []string) {
 
 	path := worktrees[idx].AbsPath
 	force, _ := cmd.Flags().GetBool("force")
-	if err := defaultCommander.worktreeRemove(path, force); err != nil {
+	if err := commander.worktreeRemove(path, force); err != nil {
 		fail(err)
 	}
 
-	gitRoot, err := defaultCommander.revParse(true)
+	gitRoot, err := commander.revParse(true)
 	if err != nil {
 		fail(fmt.Errorf("failed to get git root: %w", err))
 	}
@@ -339,8 +339,8 @@ func runRemove(cmd *cobra.Command, args []string) {
 
 // --- Helpers ---
 
-func selectWorktree(worktrees []WorktreeInfo) (int, error) {
-	return selectWorktreeTUI(worktrees, defaultCommander)
+func selectWorktree(worktrees []WorktreeInfo, commander GitCommander) (int, error) {
+	return selectWorktreeTUI(worktrees, commander)
 }
 
 func selectWorktreeTUI(worktrees []WorktreeInfo, commander GitCommander) (int, error) {
@@ -795,12 +795,6 @@ func (r *realGitCommander) worktreeAddNew(path, branch string) error {
 	cmd := exec.CommandContext(ctx, "git", "worktree", "add", "-b", branch, path)
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
-}
-
-var defaultCommander GitCommander = &realGitCommander{}
-
-func setCommander(c GitCommander) {
-	defaultCommander = c
 }
 
 type WorktreeInfo struct {
