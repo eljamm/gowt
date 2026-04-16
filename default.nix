@@ -30,12 +30,38 @@ let
     go = def.callPackage ./nix/go.nix { };
 
     formatter = def.callPackage ./nix/formatter.nix { };
-    # devPkgs = def.callPackage ./nix/packages.nix { };
+    gwt-bin = pkgs.callPackage ./nix/package.nix { };
+
+    # tool for declaratively recording project demo
+    vhs = pkgs.vhs.overrideAttrs (oldAttrs: {
+      version = "0.11.0-unstable-2026-04-06";
+
+      src = pkgs.fetchFromGitHub {
+        owner = "charmbracelet";
+        repo = "vhs";
+        rev = "6ec73298e7d3cd39eaa2a6dc8fe08fcc80f97d66";
+        hash = "sha256-a7lZzb0PhKDxcmJiJnCpRjz/g1/Czby6LaPN6RhrTRo=";
+      };
+
+      vendorHash = "sha256-cgKLYUATtn4hMdIOXZe9JWYNUOrX3S6BDfvS+rIWDfM=";
+
+      patches = oldAttrs.patches or [ ] ++ [
+        # Add keystroke captions and overlays for recorded videos
+        # https://github.com/charmbracelet/vhs/pull/719
+        ./nix/patches/vhs-keystroke-captions.patch
+      ];
+    });
+
+    record-demo = pkgs.writeShellScriptBin "record-demo" ''
+      ${def.vhs}/bin/vhs docs/demo/recording.tape
+    '';
 
     devShells.default = pkgs.mkShellNoCC {
       inputsFrom = [ def.go.shells.default ];
       packages = [
         def.formatter.package
+        def.record-demo
+        def.vhs
       ];
     };
 

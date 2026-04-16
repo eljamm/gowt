@@ -19,9 +19,13 @@
     flake-utils.lib.eachDefaultSystemPassThrough (
       system:
       let
-        pkgs = import nixpkgs { inherit system; };
+        default = import ./. { inherit self inputs system; };
 
-        gwt-bin = pkgs.callPackage ./nix/package.nix { };
+        inherit (default)
+          pkgs
+          gwt-bin
+          ;
+
         standalone = pkgs.writeShellScriptBin "gwt" ''
           ${pkgs.bashInteractive}/bin/bash -i -c \
           "source ${gwt-bin.shWrapper} && gwt \"$@\""
@@ -32,6 +36,8 @@
         default = standalone;
         package = standalone;
         gwt = gwt-bin;
+
+        record-demo = default.record-demo;
       }
     );
 }

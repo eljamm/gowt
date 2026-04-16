@@ -1,0 +1,2440 @@
+diff --git a/.golangci.yml b/.golangci.yml
+index c90f031..bc9ecf5 100644
+--- a/.golangci.yml
++++ b/.golangci.yml
+@@ -30,6 +30,18 @@ linters:
+       - text: '(slog|log)\.\w+'
+         linters:
+           - noctx
++      - text: "var-naming"
++        linters:
++          - revive
++      - text: "G705"
++        linters:
++          - gosec
++      - text: "G115"
++        linters:
++          - gosec
++      - text: "os/exec.Command must not be called"
++        linters:
++          - noctx
+     generated: lax
+     presets:
+       - common-false-positives
+diff --git a/caption.go b/caption.go
+new file mode 100644
+index 0000000..53d75f3
+--- /dev/null
++++ b/caption.go
+@@ -0,0 +1,453 @@
++package main
++
++import (
++	"fmt"
++	"math"
++	"os"
++	"path/filepath"
++	"runtime"
++	"strings"
++	"text/template"
++)
++
++// OverlayEvent represents a single text overlay at a specific point in the recording.
++type OverlayEvent struct {
++	StartMs    int64
++	DurationMs int64
++	Text       string
++}
++
++// OverlayOptions holds configuration for text overlays.
++type OverlayOptions struct {
++	Font           string
++	FontSize       int
++	Alignment      CaptionAlignment
++	FontColor      string // #RRGGBB hex
++	BoxColor       string // #RRGGBB hex
++	BoxOpacity     float64
++	BoxPadding     int
++	MarginLeft     int
++	MarginRight    int
++	MarginVertical int
++}
++
++const defaultOverlayDurationMs = 3000
++
++// DefaultOverlayOptions returns overlay options with sensible defaults.
++func DefaultOverlayOptions() OverlayOptions {
++	font := defaultOSFont()
++	return OverlayOptions{
++		Font:           font,
++		FontSize:       22,
++		Alignment:      AlignTopCenter,
++		FontColor:      "#FFFFFF",
++		BoxColor:       "#000000",
++		BoxOpacity:     0.5,
++		BoxPadding:     10,
++		MarginLeft:     20,
++		MarginRight:    20,
++		MarginVertical: 20,
++	}
++}
++
++// CaptionOptions holds configuration for keystroke captioning.
++type CaptionOptions struct {
++	Font              string
++	FontSize          int
++	KeyStyle          KeyStyle
++	MaxKeysOnscreen   int
++	InactivityTimerMs int
++	Alignment         CaptionAlignment
++	FontColor         string // #RRGGBB hex
++	HighlightColor    string // #RRGGBB hex
++	BoxColor          string // #RRGGBB hex
++	BoxOpacity        float64
++	BoxPadding        int
++	MarginLeft        int
++	MarginRight       int
++	MarginVertical    int
++}
++
++// DefaultCaptionOptions returns caption options with sensible defaults.
++func DefaultCaptionOptions() CaptionOptions {
++	font := defaultOSFont()
++	return CaptionOptions{
++		Font:              font,
++		FontSize:          22,
++		KeyStyle:          KeyStyleIcon,
++		MaxKeysOnscreen:   10,
++		InactivityTimerMs: 1000,
++		Alignment:         AlignBottomCenter,
++		FontColor:         "#FFFFFF",
++		HighlightColor:    "#FFCC66",
++		BoxColor:          "#000000",
++		BoxOpacity:        0.5,
++		BoxPadding:        10,
++		MarginLeft:        20,
++		MarginRight:       20,
++		MarginVertical:    20,
++	}
++}
++
++func defaultOSFont() string {
++	font := "monospace"
++	switch runtime.GOOS {
++	case "windows":
++		font = "Consolas"
++	case "darwin":
++		font = "Menlo"
++	}
++	return font
++}
++
++// KeyStyle represents the rendering style for key captions.
++type KeyStyle string
++
++const (
++	KeyStyleVim  KeyStyle = "vim"
++	KeyStyleIcon KeyStyle = "icon"
++)
++
++// CaptionAlignment controls where captions appear on screen.
++type CaptionAlignment string
++
++const (
++	AlignBottomLeft   CaptionAlignment = "bottom-left"
++	AlignBottomCenter CaptionAlignment = "bottom-center"
++	AlignBottomRight  CaptionAlignment = "bottom-right"
++	AlignMiddleLeft   CaptionAlignment = "middle-left"
++	AlignMiddleCenter CaptionAlignment = "middle-center"
++	AlignMiddleRight  CaptionAlignment = "middle-right"
++	AlignTopLeft      CaptionAlignment = "top-left"
++	AlignTopCenter    CaptionAlignment = "top-center"
++	AlignTopRight     CaptionAlignment = "top-right"
++)
++
++// CaptionAlignments maps alignment names to ASS numpad values (1–9).
++var CaptionAlignments = map[CaptionAlignment]int{
++	AlignBottomLeft:   1,
++	AlignBottomCenter: 2,
++	AlignBottomRight:  3,
++	AlignMiddleLeft:   4,
++	AlignMiddleCenter: 5,
++	AlignMiddleRight:  6,
++	AlignTopLeft:      7,
++	AlignTopCenter:    8,
++	AlignTopRight:     9,
++}
++
++// ASSValue returns the ASS numpad alignment integer (1–9).
++func (a CaptionAlignment) ASSValue() int {
++	if v, ok := CaptionAlignments[a]; ok {
++		return v
++	}
++	return CaptionAlignments[AlignBottomRight]
++}
++
++// Normalize transforms a key name (e.g. "Ctrl+Shift+a") into styled display text.
++func (s KeyStyle) Normalize(key string) string {
++	parts := strings.Split(key, "+")
++	overrides := vimOverrides
++	if s == KeyStyleIcon {
++		overrides = iconOverrides
++	}
++	for i, p := range parts {
++		if o, ok := overrides[p]; ok {
++			parts[i] = o
++		}
++	}
++	if s == KeyStyleIcon {
++		return strings.Join(parts, "")
++	}
++	if len(parts) == 1 && len([]rune(parts[0])) == 1 {
++		return parts[0]
++	}
++	return "<" + strings.Join(parts, "-") + ">"
++}
++
++var vimOverrides = map[string]string{
++	"Backspace": "BS",
++	"Delete":    "Del",
++	"Enter":     "CR",
++	"Escape":    "Esc",
++	"Ctrl":      "C",
++	"Alt":       "A",
++	"Shift":     "S",
++}
++
++var iconOverrides = map[string]string{
++	"Backspace": "⌫",
++	"Delete":    "⌦",
++	"Ctrl":      "^",
++	"Alt":       "⌥",
++	"Shift":     "⇧",
++	"Down":      "↓",
++	"PageDown":  "PgDn",
++	"Up":        "↑",
++	"PageUp":    "PgUp",
++	"Left":      "←",
++	"Right":     "→",
++	"Space":     "␣",
++	"Enter":     "↵",
++	"Escape":    "Esc",
++	"Tab":       "⇥",
++}
++
++// CaptionWindow describes the sliding key display at the moment each key is pressed.
++type CaptionWindow struct {
++	First, Last int
++	ShowUntil   int
++	IsTruncated bool
++}
++
++// captionWindows returns one CaptionWindow per event. Windows are computed
++// such that keys remain on screen until inactivityTimerMs has been exceeded.
++// Further, there will be no more than maxKeys shown on the screen at any
++// point in time.
++func captionWindows(events []KeyEvent, inactivityTimerMs, maxKeys int) []CaptionWindow {
++	n := len(events)
++	wins := make([]CaptionWindow, 0, n)
++	sessionStart := 0
++
++	for i := range n {
++		current := events[i]
++		windowStart := max(sessionStart, i-maxKeys+1)
++		isTruncated := windowStart > sessionStart
++
++		var showUntil int
++		if i+1 < n && int(events[i+1].StartMs)-int(current.StartMs) < inactivityTimerMs {
++			showUntil = int(events[i+1].StartMs)
++		} else {
++			showUntil = int(current.StartMs) + inactivityTimerMs
++			sessionStart = i + 1
++		}
++
++		wins = append(wins, CaptionWindow{
++			First:       windowStart,
++			Last:        i,
++			ShowUntil:   showUntil,
++			IsTruncated: isTruncated,
++		})
++	}
++	return wins
++}
++
++// ASS helpers
++
++func msToASS(ms int) string {
++	h := ms / 3600000
++	ms %= 3600000
++	m := ms / 60000
++	ms %= 60000
++	s := ms / 1000
++	ms %= 1000
++	cs := ms / 10
++	return fmt.Sprintf("%d:%02d:%02d.%02d", h, m, s, cs)
++}
++
++func assEscape(s string) string {
++	s = strings.ReplaceAll(s, `\`, `\\`)
++	// Restore ASS newline sequences that were double-escaped
++	s = strings.ReplaceAll(s, `\\N`, `\N`)
++	s = strings.ReplaceAll(s, `\\n`, `\n`)
++	s = strings.ReplaceAll(s, "{", `\{`)
++	s = strings.ReplaceAll(s, "}", `\}`)
++	return s
++}
++
++func opacityToASSAlpha(opacity float64) string {
++	alpha := int(math.Round((1 - opacity) * 255))
++	return fmt.Sprintf("%02X", alpha)
++}
++
++func hexToASSBGR(hex string) string {
++	hex = strings.TrimPrefix(hex, "#")
++	r, g, b := hex[0:2], hex[2:4], hex[4:6]
++	return fmt.Sprintf("&H%s%s%s&", b, g, r)
++}
++
++// captionWindowPlainText builds plain text with no inline overrides.
++// Used for the background box layer so the opaque box renders without seams.
++func captionWindowPlainText(events []KeyEvent, w CaptionWindow) string {
++	var parts []string
++	if w.IsTruncated {
++		parts = append(parts, "…")
++	}
++	for i := w.First; i <= w.Last; i++ {
++		parts = append(parts, assEscape(events[i].Key))
++	}
++	return strings.Join(parts, " ")
++}
++
++// captionWindowColoredText builds ASS text with the last key highlighted.
++// Used for the visible text layer (no opaque box, so color overrides cause no seams).
++func captionWindowColoredText(events []KeyEvent, w CaptionWindow, highlightColor string) string {
++	var parts []string
++	if w.IsTruncated {
++		parts = append(parts, "…")
++	}
++	for i := w.First; i < w.Last; i++ {
++		parts = append(parts, assEscape(events[i].Key))
++	}
++	lastKey := assEscape(events[w.Last].Key)
++	parts = append(parts, fmt.Sprintf(`{\c%s}%s`, highlightColor, lastKey))
++	return strings.Join(parts, " ")
++}
++
++const ASSHeaderTemplate = `[Script Info]
++ScriptType: v4.00+
++PlayResX: {{.ResX}}
++PlayResY: {{.ResY}}
++ScaledBorderAndShadow: yes
++
++[V4+ Styles]
++Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
++{{- if .HasCaption}}
++Style: KeysBG,{{.Font}},{{.FontSize}},&H00FFFFFF,&H000000FF,{{.BoxColor}},&H00000000,1,0,0,0,100,100,0,0,3,{{.BoxPadding}},0,{{.Alignment}},{{.MarginLeft}},{{.MarginRight}},{{.MarginVertical}},1
++Style: KeysFG,{{.Font}},{{.FontSize}},{{.FontColor}},&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,0,0,{{.Alignment}},{{.MarginLeft}},{{.MarginRight}},{{.MarginVertical}},1
++{{- end}}
++{{- if .HasOverlay}}
++Style: OverlayBG,{{.OverlayFont}},{{.OverlayFontSize}},&H00FFFFFF,&H000000FF,{{.OverlayBoxColor}},&H00000000,1,0,0,0,100,100,0,0,3,{{.OverlayBoxPadding}},0,{{.OverlayAlignment}},{{.OverlayMarginLeft}},{{.OverlayMarginRight}},{{.OverlayMarginVertical}},1
++Style: OverlayFG,{{.OverlayFont}},{{.OverlayFontSize}},{{.OverlayFontColor}},&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,0,0,{{.OverlayAlignment}},{{.OverlayMarginLeft}},{{.OverlayMarginRight}},{{.OverlayMarginVertical}},1
++{{- end}}
++
++[Events]
++Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text`
++
++type ASSHeaderData struct {
++	ResX, ResY            int
++	Font                  string
++	FontColor             string
++	FontSize              int
++	Alignment             int
++	MarginLeft            int
++	MarginRight           int
++	MarginVertical        int
++	BoxColor              string
++	BoxPadding            int
++	HasCaption            bool
++	HasOverlay            bool
++	OverlayFont           string
++	OverlayFontColor      string
++	OverlayFontSize       int
++	OverlayAlignment      int
++	OverlayMarginLeft     int
++	OverlayMarginRight    int
++	OverlayMarginVertical int
++	OverlayBoxColor       string
++	OverlayBoxPadding     int
++}
++
++var ASSHeader = template.Must(template.New("captionASS").Parse(ASSHeaderTemplate))
++
++// GenerateCaptionFile creates an ASS subtitle file from key events and/or overlay events and returns its path.
++func GenerateCaptionFile(events []KeyEvent, overlays []OverlayEvent, videoOpts VideoOptions, opts CaptionOptions, overlayOpts OverlayOptions) (string, error) {
++	if len(events) == 0 && len(overlays) == 0 {
++		return "", nil
++	}
++
++	width, height := calcTermDimensions(*videoOpts.Style)
++	playbackSpeed := videoOpts.PlaybackSpeed
++	tempDir := videoOpts.Input
++
++	// Normalize caption events: apply key style and adjust for playback speed.
++	normalized := make([]KeyEvent, len(events))
++	for i, e := range events {
++		normalized[i] = KeyEvent{
++			StartMs: e.StartMs,
++			Key:     opts.KeyStyle.Normalize(e.Key),
++		}
++	}
++
++	// Normalize overlay events: copy so we can adjust timestamps in place.
++	normalizedOverlays := make([]OverlayEvent, len(overlays))
++	copy(normalizedOverlays, overlays)
++
++	// Adjust all timestamps for playback speed.
++	if playbackSpeed != 0 && playbackSpeed != 1.0 {
++		for i := range normalized {
++			normalized[i].StartMs = int64(float64(normalized[i].StartMs) / playbackSpeed)
++		}
++		for i := range normalizedOverlays {
++			normalizedOverlays[i].StartMs = int64(float64(normalizedOverlays[i].StartMs) / playbackSpeed)
++			normalizedOverlays[i].DurationMs = int64(float64(normalizedOverlays[i].DurationMs) / playbackSpeed)
++		}
++	}
++
++	assPath := filepath.Join(tempDir, "captions.ass")
++	f, err := os.Create(assPath)
++	if err != nil {
++		return "", fmt.Errorf("failed to create caption file: %w", err)
++	}
++	defer f.Close() //nolint:errcheck
++
++	data := ASSHeaderData{
++		ResX:                  width,
++		ResY:                  height,
++		HasCaption:            len(events) > 0,
++		HasOverlay:            len(overlays) > 0,
++		Font:                  opts.Font,
++		FontSize:              opts.FontSize,
++		Alignment:             opts.Alignment.ASSValue(),
++		MarginLeft:            opts.MarginLeft,
++		MarginRight:           opts.MarginRight,
++		MarginVertical:        opts.MarginVertical,
++		BoxPadding:            opts.BoxPadding,
++		FontColor:             hexToASSBGR(opts.FontColor),
++		BoxColor:              hexToASSBGR(opts.BoxColor),
++		OverlayFont:           overlayOpts.Font,
++		OverlayFontSize:       overlayOpts.FontSize,
++		OverlayAlignment:      overlayOpts.Alignment.ASSValue(),
++		OverlayMarginLeft:     overlayOpts.MarginLeft,
++		OverlayMarginRight:    overlayOpts.MarginRight,
++		OverlayMarginVertical: overlayOpts.MarginVertical,
++		OverlayBoxPadding:     overlayOpts.BoxPadding,
++		OverlayFontColor:      hexToASSBGR(overlayOpts.FontColor),
++		OverlayBoxColor:       hexToASSBGR(overlayOpts.BoxColor),
++	}
++
++	if err := ASSHeader.Execute(f, data); err != nil {
++		return "", fmt.Errorf("failed to write caption header: %w", err)
++	}
++	_, _ = fmt.Fprintln(f)
++
++	alpha := opacityToASSAlpha(opts.BoxOpacity)
++	highlightColor := hexToASSBGR(opts.HighlightColor)
++
++	for _, w := range captionWindows(normalized, opts.InactivityTimerMs, max(opts.MaxKeysOnscreen, 1)) {
++		start := msToASS(int(normalized[w.Last].StartMs))
++		end := msToASS(w.ShowUntil)
++
++		// Layer 0: invisible text with seamless opaque box (no inline overrides = no seams)
++		plainText := captionWindowPlainText(normalized, w)
++		bgLine := fmt.Sprintf(`Dialogue: 0,%s,%s,KeysBG,,0,0,0,,{\3a&H%s&\1a&HFF&}%s`,
++			start, end, alpha, plainText)
++		_, _ = fmt.Fprintln(f, bgLine)
++
++		// Layer 1: visible colored text with no box
++		coloredText := captionWindowColoredText(normalized, w, highlightColor)
++		fgLine := fmt.Sprintf(`Dialogue: 1,%s,%s,KeysFG,,0,0,0,,%s`,
++			start, end, coloredText)
++		_, _ = fmt.Fprintln(f, fgLine)
++	}
++
++	overlayAlpha := opacityToASSAlpha(overlayOpts.BoxOpacity)
++
++	for _, o := range normalizedOverlays {
++		start := msToASS(int(o.StartMs))
++		end := msToASS(int(o.StartMs + o.DurationMs))
++		text := assEscape(o.Text)
++
++		// Layer 2: invisible text with opaque box
++		bgLine := fmt.Sprintf(`Dialogue: 2,%s,%s,OverlayBG,,0,0,0,,{\3a&H%s&\1a&HFF&}%s`,
++			start, end, overlayAlpha, text)
++		_, _ = fmt.Fprintln(f, bgLine)
++
++		// Layer 3: visible text
++		fgLine := fmt.Sprintf(`Dialogue: 3,%s,%s,OverlayFG,,0,0,0,,%s`,
++			start, end, text)
++		_, _ = fmt.Fprintln(f, fgLine)
++	}
++
++	return assPath, nil
++}
+diff --git a/caption_test.go b/caption_test.go
+new file mode 100644
+index 0000000..4b0912d
+--- /dev/null
++++ b/caption_test.go
+@@ -0,0 +1,444 @@
++package main
++
++import (
++	"fmt"
++	"os"
++	"path/filepath"
++	"reflect"
++	"strings"
++	"testing"
++)
++
++func keyEvents(ms ...int64) []KeyEvent {
++	out := make([]KeyEvent, len(ms))
++	for i, t := range ms {
++		out[i] = KeyEvent{StartMs: t, Key: "a"}
++	}
++	return out
++}
++
++func TestVimNormalize(t *testing.T) {
++	tests := []struct {
++		input string
++		want  string
++	}{
++		{"a", "a"},
++		{"Enter", "<CR>"},
++		{"Backspace", "<BS>"},
++		{"Escape", "<Esc>"},
++		{"Ctrl+c", "<C-c>"},
++		{"Alt+f", "<A-f>"},
++		{"Shift+Tab", "<S-Tab>"},
++		{"Space", "<Space>"},
++		{"Delete", "<Del>"},
++	}
++	for _, tt := range tests {
++		t.Run(tt.input, func(t *testing.T) {
++			got := KeyStyleVim.Normalize(tt.input)
++			if got != tt.want {
++				t.Errorf("KeyStyleVim.Normalize(%q) = %q, want %q", tt.input, got, tt.want)
++			}
++		})
++	}
++}
++
++func TestIconNormalize(t *testing.T) {
++	tests := []struct {
++		input string
++		want  string
++	}{
++		{"a", "a"},
++		{"Enter", "↵"},
++		{"Escape", "Esc"},
++		{"PageUp", "PgUp"},
++		{"PageDown", "PgDn"},
++		{"Backspace", "⌫"},
++		{"Space", "␣"},
++		{"Ctrl+c", "^c"},
++		{"Alt+d", "⌥d"},
++		{"Shift+Tab", "⇧⇥"},
++	}
++	for _, tt := range tests {
++		t.Run(tt.input, func(t *testing.T) {
++			got := KeyStyleIcon.Normalize(tt.input)
++			if got != tt.want {
++				t.Errorf("KeyStyleIcon.Normalize(%q) = %q, want %q", tt.input, got, tt.want)
++			}
++		})
++	}
++}
++
++func TestCaptionWindows(t *testing.T) {
++	tests := []struct {
++		name              string
++		events            []KeyEvent
++		inactivityTimerMs int
++		maxKeys           int
++		want              []CaptionWindow
++	}{
++		{
++			name:              "empty events",
++			events:            []KeyEvent{},
++			inactivityTimerMs: 1000,
++			maxKeys:           3,
++			want:              []CaptionWindow{},
++		},
++		{
++			name:              "single event",
++			events:            keyEvents(0),
++			inactivityTimerMs: 1000,
++			maxKeys:           3,
++			want: []CaptionWindow{
++				{First: 0, Last: 0, ShowUntil: 1000, IsTruncated: false},
++			},
++		},
++		{
++			name:              "two events in same session",
++			events:            keyEvents(0, 500),
++			inactivityTimerMs: 1000,
++			maxKeys:           3,
++			want: []CaptionWindow{
++				{First: 0, Last: 0, ShowUntil: 500, IsTruncated: false},
++				{First: 0, Last: 1, ShowUntil: 1500, IsTruncated: false},
++			},
++		},
++		{
++			name:              "gap exactly equals inactivity timer starts new session",
++			events:            keyEvents(0, 1000),
++			inactivityTimerMs: 1000,
++			maxKeys:           3,
++			want: []CaptionWindow{
++				{First: 0, Last: 0, ShowUntil: 1000, IsTruncated: false},
++				{First: 1, Last: 1, ShowUntil: 2000, IsTruncated: false},
++			},
++		},
++		{
++			name:              "gap one over inactivity timer starts new session",
++			events:            keyEvents(0, 1001),
++			inactivityTimerMs: 1000,
++			maxKeys:           3,
++			want: []CaptionWindow{
++				{First: 0, Last: 0, ShowUntil: 1000, IsTruncated: false},
++				{First: 1, Last: 1, ShowUntil: 2001, IsTruncated: false},
++			},
++		},
++		{
++			name:              "sliding window truncates when maxKeys exceeded",
++			events:            keyEvents(0, 100, 200, 300),
++			inactivityTimerMs: 1000,
++			maxKeys:           3,
++			want: []CaptionWindow{
++				{First: 0, Last: 0, ShowUntil: 100, IsTruncated: false},
++				{First: 0, Last: 1, ShowUntil: 200, IsTruncated: false},
++				{First: 0, Last: 2, ShowUntil: 300, IsTruncated: false},
++				{First: 1, Last: 3, ShowUntil: 1300, IsTruncated: true},
++			},
++		},
++		{
++			name:              "session reset clears truncation",
++			events:            keyEvents(0, 100, 200, 2000, 2100),
++			inactivityTimerMs: 1000,
++			maxKeys:           2,
++			want: []CaptionWindow{
++				{First: 0, Last: 0, ShowUntil: 100, IsTruncated: false},
++				{First: 0, Last: 1, ShowUntil: 200, IsTruncated: false},
++				{First: 1, Last: 2, ShowUntil: 1200, IsTruncated: true},
++				{First: 3, Last: 3, ShowUntil: 2100, IsTruncated: false},
++				{First: 3, Last: 4, ShowUntil: 3100, IsTruncated: false},
++			},
++		},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			got := captionWindows(tt.events, tt.inactivityTimerMs, tt.maxKeys)
++			if len(got) == 0 && len(tt.want) == 0 {
++				return
++			}
++			if !reflect.DeepEqual(got, tt.want) {
++				t.Errorf("got  %v\nwant %v", got, tt.want)
++			}
++		})
++	}
++}
++
++func TestMsToASS(t *testing.T) {
++	tests := []struct {
++		ms   int
++		want string
++	}{
++		{0, "0:00:00.00"},
++		{1000, "0:00:01.00"},
++		{61000, "0:01:01.00"},
++		{3661050, "1:01:01.05"},
++		{500, "0:00:00.50"},
++		{10, "0:00:00.01"},
++	}
++	for _, tt := range tests {
++		t.Run(tt.want, func(t *testing.T) {
++			got := msToASS(tt.ms)
++			if got != tt.want {
++				t.Errorf("msToASS(%d) = %q, want %q", tt.ms, got, tt.want)
++			}
++		})
++	}
++}
++
++func TestAssEscape(t *testing.T) {
++	tests := []struct {
++		input string
++		want  string
++	}{
++		{`hello`, `hello`},
++		{`a\b`, `a\\b`},
++		{`{tag}`, `\{tag\}`},
++		{`a\{b}`, `a\\\{b\}`},
++		{`a\Nb`, `a\Nb`},
++	}
++	for _, tt := range tests {
++		t.Run(tt.input, func(t *testing.T) {
++			got := assEscape(tt.input)
++			if got != tt.want {
++				t.Errorf("assEscape(%q) = %q, want %q", tt.input, got, tt.want)
++			}
++		})
++	}
++}
++
++func TestOpacityToASSAlpha(t *testing.T) {
++	tests := []struct {
++		opacity float64
++		want    string
++	}{
++		{1.0, "00"},
++		{0.0, "FF"},
++		{0.5, "80"},
++	}
++	for _, tt := range tests {
++		t.Run(tt.want, func(t *testing.T) {
++			got := opacityToASSAlpha(tt.opacity)
++			if got != tt.want {
++				t.Errorf("opacityToASSAlpha(%f) = %q, want %q", tt.opacity, got, tt.want)
++			}
++		})
++	}
++}
++
++func TestHexToASSBGR(t *testing.T) {
++	tests := []struct {
++		hex  string
++		want string
++	}{
++		{"#FFCC66", "&H66CCFF&"},
++		{"#FF0000", "&H0000FF&"},
++		{"#00FF00", "&H00FF00&"},
++	}
++	for _, tt := range tests {
++		t.Run(tt.hex, func(t *testing.T) {
++			got := hexToASSBGR(tt.hex)
++			if got != tt.want {
++				t.Errorf("hexToASSBGR(%q) = %q, want %q", tt.hex, got, tt.want)
++			}
++		})
++	}
++}
++
++func TestCaptionAlignment(t *testing.T) {
++	tests := []struct {
++		alignment CaptionAlignment
++		want      int
++	}{
++		{AlignBottomLeft, 1},
++		{AlignBottomCenter, 2},
++		{AlignBottomRight, 3},
++		{AlignMiddleLeft, 4},
++		{AlignMiddleCenter, 5},
++		{AlignMiddleRight, 6},
++		{AlignTopLeft, 7},
++		{AlignTopCenter, 8},
++		{AlignTopRight, 9},
++		{"unknown", 3}, // default
++	}
++	for _, tt := range tests {
++		t.Run(string(tt.alignment), func(t *testing.T) {
++			got := tt.alignment.ASSValue()
++			if got != tt.want {
++				t.Errorf("CaptionAlignment(%q).ASSValue() = %d, want %d", tt.alignment, got, tt.want)
++			}
++		})
++	}
++}
++
++func TestGenerateCaptionFile(t *testing.T) {
++	tmpDir := t.TempDir()
++
++	events := []KeyEvent{
++		{StartMs: 0, Key: "h"},
++		{StartMs: 100, Key: "i"},
++		{StartMs: 200, Key: "Enter"},
++	}
++
++	videoOpts := VideoOptions{PlaybackSpeed: 1.0, Input: tmpDir, Style: &StyleOptions{Width: 800, Height: 600}}
++	path, err := GenerateCaptionFile(events, nil, videoOpts, DefaultCaptionOptions(), DefaultOverlayOptions())
++	if err != nil {
++		t.Fatalf("GenerateCaptionFile failed: %v", err)
++	}
++
++	if filepath.Dir(path) != tmpDir {
++		t.Errorf("expected file in %s, got %s", tmpDir, path)
++	}
++
++	data, err := os.ReadFile(path)
++	if err != nil {
++		t.Fatalf("failed to read caption file: %v", err)
++	}
++	content := string(data)
++
++	if !strings.Contains(content, "[Script Info]") {
++		t.Error("expected ASS header in output")
++	}
++	if !strings.Contains(content, "PlayResX: 800") {
++		t.Error("expected PlayResX: 800")
++	}
++	if !strings.Contains(content, "Dialogue:") {
++		t.Error("expected Dialogue lines in output")
++	}
++	expectedFont := DefaultCaptionOptions().Font
++	if !strings.Contains(content, expectedFont) {
++		t.Errorf("expected default font %q in output", expectedFont)
++	}
++	// Default alignment is bottom-center (ASS numpad 2)
++	if !strings.Contains(content, ",2,20,20,20,") {
++		t.Error("expected default alignment value 2 in style lines")
++	}
++}
++
++func TestGenerateCaptionFileDefaultFont(t *testing.T) {
++	tmpDir := t.TempDir()
++
++	events := []KeyEvent{{StartMs: 0, Key: "a"}}
++
++	// When CaptionFont is empty, should default to the OS-appropriate font
++	videoOpts := VideoOptions{PlaybackSpeed: 1.0, Input: tmpDir, Style: &StyleOptions{Width: 800, Height: 600}}
++	path, err := GenerateCaptionFile(events, nil, videoOpts, DefaultCaptionOptions(), DefaultOverlayOptions())
++	if err != nil {
++		t.Fatalf("GenerateCaptionFile failed: %v", err)
++	}
++
++	data, err := os.ReadFile(path)
++	if err != nil {
++		t.Fatalf("failed to read caption file: %v", err)
++	}
++	content := string(data)
++
++	expectedFont := DefaultCaptionOptions().Font
++	if !strings.Contains(content, expectedFont+",") {
++		t.Errorf("expected default font %q in ASS output", expectedFont)
++	}
++}
++
++func TestGenerateCaptionFileExplicitFontOverride(t *testing.T) {
++	tmpDir := t.TempDir()
++
++	events := []KeyEvent{{StartMs: 0, Key: "a"}}
++	opts := DefaultCaptionOptions()
++	opts.Font = "JetBrainsMonoNL NFM"
++
++	videoOpts := VideoOptions{PlaybackSpeed: 1.0, Input: tmpDir, Style: &StyleOptions{Width: 800, Height: 600}}
++	path, err := GenerateCaptionFile(events, nil, videoOpts, opts, DefaultOverlayOptions())
++	if err != nil {
++		t.Fatalf("GenerateCaptionFile failed: %v", err)
++	}
++
++	data, err := os.ReadFile(path)
++	if err != nil {
++		t.Fatalf("failed to read caption file: %v", err)
++	}
++	content := string(data)
++
++	if !strings.Contains(content, "JetBrainsMonoNL NFM") {
++		t.Error("expected explicit CaptionFont in ASS output")
++	}
++	defaultFont := DefaultCaptionOptions().Font
++	if strings.Contains(content, defaultFont) {
++		t.Errorf("default font %q should not appear when CaptionFont is set explicitly", defaultFont)
++	}
++}
++
++func TestGenerateCaptionFilePlaybackSpeed(t *testing.T) {
++	tmpDir := t.TempDir()
++
++	events := []KeyEvent{
++		{StartMs: 0, Key: "a"},
++		{StartMs: 2000, Key: "b"},
++	}
++
++	videoOpts := VideoOptions{PlaybackSpeed: 2.0, Input: tmpDir, Style: &StyleOptions{Width: 800, Height: 600}}
++	path, err := GenerateCaptionFile(events, nil, videoOpts, DefaultCaptionOptions(), DefaultOverlayOptions())
++	if err != nil {
++		t.Fatalf("GenerateCaptionFile failed: %v", err)
++	}
++
++	data, err := os.ReadFile(path)
++	if err != nil {
++		t.Fatalf("failed to read caption file: %v", err)
++	}
++	content := string(data)
++
++	// At 2x speed, 2000ms becomes 1000ms = 0:00:01.00
++	if !strings.Contains(content, "0:00:01.00") {
++		t.Error("expected timestamp adjusted for 2x playback speed")
++	}
++}
++
++func TestCaptionFontSizeConsistentAcrossHeights(t *testing.T) {
++	fontSize := 22
++	var firstContent string
++	for _, height := range []int{384, 600, 768, 1080} {
++		t.Run(fmt.Sprintf("height_%d", height), func(t *testing.T) {
++			tmpDir := t.TempDir()
++			events := []KeyEvent{{StartMs: 0, Key: "a"}}
++			opts := DefaultCaptionOptions()
++			opts.FontSize = fontSize
++
++			videoOpts := VideoOptions{
++				PlaybackSpeed: 1.0,
++				Input:         tmpDir,
++				Style:         &StyleOptions{Width: 800, Height: height},
++			}
++			path, err := GenerateCaptionFile(events, nil, videoOpts, opts, DefaultOverlayOptions())
++			if err != nil {
++				t.Fatalf("GenerateCaptionFile failed: %v", err)
++			}
++			data, err := os.ReadFile(path)
++			if err != nil {
++				t.Fatalf("failed to read caption file: %v", err)
++			}
++			content := string(data)
++			// Extract the font size from the style line
++			for _, line := range strings.Split(content, "\n") {
++				if strings.HasPrefix(line, "Style: KeysFG,") {
++					if firstContent == "" {
++						firstContent = line
++					} else if line != firstContent {
++						t.Errorf("font size differs across heights:\n  first:   %s\n  current: %s", firstContent, line)
++					}
++					break
++				}
++			}
++		})
++	}
++}
++
++func TestGenerateCaptionFileEmpty(t *testing.T) {
++	tmpDir := t.TempDir()
++
++	videoOpts := VideoOptions{PlaybackSpeed: 1.0, Input: tmpDir, Style: &StyleOptions{Width: 800, Height: 600}}
++	path, err := GenerateCaptionFile([]KeyEvent{}, nil, videoOpts, DefaultCaptionOptions(), DefaultOverlayOptions())
++	if err != nil {
++		t.Fatalf("unexpected error: %v", err)
++	}
++	if path != "" {
++		t.Errorf("expected empty path for no events, got %q", path)
++	}
++}
+diff --git a/command.go b/command.go
+index 4e5b0d0..ae05931 100644
+--- a/command.go
++++ b/command.go
+@@ -8,6 +8,7 @@ import (
+ 	"regexp"
+ 	"strconv"
+ 	"strings"
++	"sync/atomic"
+ 	"time"
+ 
+ 	"github.com/atotto/clipboard"
+@@ -70,6 +71,9 @@ var CommandFuncs = map[parser.CommandType]CommandFunc{
+ 	token.PASTE:       ExecutePaste,
+ 	token.ENV:         ExecuteEnv,
+ 	token.WAIT:        ExecuteWait,
++	token.OVERLAY:     ExecuteOverlay,
++	token.CAPTION_ON:  ExecuteCaptionOn,
++	token.CAPTION_OFF: ExecuteCaptionOff,
+ }
+ 
+ // ExecuteNoop is a no-op command that does nothing.
+@@ -94,6 +98,7 @@ func ExecuteKey(k input.Key) CommandFunc {
+ 			repeat = 1
+ 		}
+ 		for i := 0; i < repeat; i++ {
++			v.KeyLogger.LogKey(c.Type.String())
+ 			err = v.Page.Keyboard.Type(k)
+ 			if err != nil {
+ 				return fmt.Errorf("failed to type key %c: %w", k, err)
+@@ -211,6 +216,7 @@ func ExecuteWait(c parser.Command, v *VHS) error {
+ // ExecuteCtrl is a CommandFunc that presses the argument keys and/or modifiers
+ // with the ctrl key held down on the running instance of vhs.
+ func ExecuteCtrl(c parser.Command, v *VHS) error {
++	v.KeyLogger.LogKey("Ctrl+" + c.Args)
+ 	// Create key combination by holding ControlLeft
+ 	action := v.Page.KeyActions().Press(input.ControlLeft)
+ 	keys := strings.Split(c.Args, " ")
+@@ -266,6 +272,7 @@ func ExecuteCtrl(c parser.Command, v *VHS) error {
+ // ExecuteAlt is a CommandFunc that presses the argument key with the alt key
+ // held down on the running instance of vhs.
+ func ExecuteAlt(c parser.Command, v *VHS) error {
++	v.KeyLogger.LogKey("Alt+" + c.Args)
+ 	err := v.Page.Keyboard.Press(input.AltLeft)
+ 	if err != nil {
+ 		return fmt.Errorf("failed to press Alt key: %w", err)
+@@ -305,6 +312,7 @@ func ExecuteAlt(c parser.Command, v *VHS) error {
+ // ExecuteShift is a CommandFunc that presses the argument key with the shift
+ // key held down on the running instance of vhs.
+ func ExecuteShift(c parser.Command, v *VHS) error {
++	v.KeyLogger.LogKey("Shift+" + c.Args)
+ 	err := v.Page.Keyboard.Press(input.ShiftLeft)
+ 	if err != nil {
+ 		return fmt.Errorf("failed to press Shift key: %w", err)
+@@ -383,6 +391,11 @@ func ExecuteType(c parser.Command, v *VHS) error {
+ 		}
+ 	}
+ 	for _, r := range c.Args {
++		if r == ' ' { // make in consistent in the log file
++			v.KeyLogger.LogKey("Space")
++		} else {
++			v.KeyLogger.LogKey(string(r))
++		}
+ 		k, ok := keymap[r]
+ 		if ok {
+ 			err := v.Page.Keyboard.Type(k)
+@@ -458,27 +471,51 @@ func ExecutePaste(_ parser.Command, v *VHS) error {
+ 
+ // Settings maps the Set commands to their respective functions.
+ var Settings = map[string]CommandFunc{
+-	"FontFamily":    ExecuteSetFontFamily,
+-	"FontSize":      ExecuteSetFontSize,
+-	"Framerate":     ExecuteSetFramerate,
+-	"Height":        ExecuteSetHeight,
+-	"LetterSpacing": ExecuteSetLetterSpacing,
+-	"LineHeight":    ExecuteSetLineHeight,
+-	"PlaybackSpeed": ExecuteSetPlaybackSpeed,
+-	"Padding":       ExecuteSetPadding,
+-	"Theme":         ExecuteSetTheme,
+-	"TypingSpeed":   ExecuteSetTypingSpeed,
+-	"Width":         ExecuteSetWidth,
+-	"Shell":         ExecuteSetShell,
+-	"LoopOffset":    ExecuteLoopOffset,
+-	"MarginFill":    ExecuteSetMarginFill,
+-	"Margin":        ExecuteSetMargin,
+-	"WindowBar":     ExecuteSetWindowBar,
+-	"WindowBarSize": ExecuteSetWindowBarSize,
+-	"BorderRadius":  ExecuteSetBorderRadius,
+-	"WaitPattern":   ExecuteSetWaitPattern,
+-	"WaitTimeout":   ExecuteSetWaitTimeout,
+-	"CursorBlink":   ExecuteSetCursorBlink,
++	"FontFamily":             ExecuteSetFontFamily,
++	"FontSize":               ExecuteSetFontSize,
++	"Framerate":              ExecuteSetFramerate,
++	"Height":                 ExecuteSetHeight,
++	"LetterSpacing":          ExecuteSetLetterSpacing,
++	"LineHeight":             ExecuteSetLineHeight,
++	"PlaybackSpeed":          ExecuteSetPlaybackSpeed,
++	"Padding":                ExecuteSetPadding,
++	"Theme":                  ExecuteSetTheme,
++	"TypingSpeed":            ExecuteSetTypingSpeed,
++	"Width":                  ExecuteSetWidth,
++	"Shell":                  ExecuteSetShell,
++	"LoopOffset":             ExecuteLoopOffset,
++	"MarginFill":             ExecuteSetMarginFill,
++	"Margin":                 ExecuteSetMargin,
++	"WindowBar":              ExecuteSetWindowBar,
++	"WindowBarSize":          ExecuteSetWindowBarSize,
++	"BorderRadius":           ExecuteSetBorderRadius,
++	"WaitPattern":            ExecuteSetWaitPattern,
++	"WaitTimeout":            ExecuteSetWaitTimeout,
++	"CursorBlink":            ExecuteSetCursorBlink,
++	"CaptionFont":            ExecuteSetCaptionFont,
++	"CaptionFontSize":        ExecuteSetCaptionFontSize,
++	"CaptionKeyStyle":        ExecuteSetCaptionKeyStyle,
++	"CaptionMaxKeys":         ExecuteSetCaptionMaxKeys,
++	"CaptionInactivityTimer": ExecuteSetCaptionInactivityTimer,
++	"CaptionAlignment":       ExecuteSetCaptionAlignment,
++	"CaptionFontColor":       ExecuteSetCaptionFontColor,
++	"CaptionHighlightColor":  ExecuteSetCaptionHighlightColor,
++	"CaptionBoxColor":        ExecuteSetCaptionBoxColor,
++	"CaptionBoxOpacity":      ExecuteSetCaptionBoxOpacity,
++	"CaptionBoxPadding":      ExecuteSetCaptionBoxPadding,
++	"CaptionMarginLeft":      ExecuteSetCaptionMarginLeft,
++	"CaptionMarginRight":     ExecuteSetCaptionMarginRight,
++	"CaptionMarginVertical":  ExecuteSetCaptionMarginVertical,
++	"OverlayFont":            ExecuteSetOverlayFont,
++	"OverlayFontSize":        ExecuteSetOverlayFontSize,
++	"OverlayFontColor":       ExecuteSetOverlayFontColor,
++	"OverlayBoxColor":        ExecuteSetOverlayBoxColor,
++	"OverlayBoxOpacity":      ExecuteSetOverlayBoxOpacity,
++	"OverlayBoxPadding":      ExecuteSetOverlayBoxPadding,
++	"OverlayAlignment":       ExecuteSetOverlayAlignment,
++	"OverlayMarginLeft":      ExecuteSetOverlayMarginLeft,
++	"OverlayMarginRight":     ExecuteSetOverlayMarginRight,
++	"OverlayMarginVertical":  ExecuteSetOverlayMarginVertical,
+ }
+ 
+ // ExecuteSet applies the settings on the running vhs specified by the
+@@ -754,6 +791,264 @@ func ExecuteScreenshot(c parser.Command, v *VHS) error {
+ 	return nil
+ }
+ 
++// ensureLibass checks that ffmpeg was compiled with libass support, which is
++// required for CaptionOn. We run `ffmpeg -filters` and look for the
++// "ass" filter rather than letting the render fail late with a cryptic error.
++func ensureLibass() error {
++	// ffmpeg -filters writes to stderr, so capture combined output
++	cmd := exec.Command("ffmpeg", "-filters")
++	out, err := cmd.CombinedOutput()
++	if err != nil {
++		return fmt.Errorf("could not query ffmpeg filters: %w", err)
++	}
++	// Each filter line looks like: " T. ass  V->V  Render ASS subtitles"
++	// Match " ass " with surrounding spaces to avoid false positives (bass, allpass, etc.)
++	for _, line := range strings.Split(string(out), "\n") {
++		fields := strings.Fields(line)
++		if len(fields) >= 2 && fields[1] == "ass" {
++			return nil
++		}
++	}
++	return fmt.Errorf("ffmpeg was not compiled with libass support, which is required for CaptionOn.\nReinstall ffmpeg with libass (e.g. `brew install ffmpeg-full` on macOS)")
++}
++
++// ExecuteCaptionOn enables caption key logging.
++func ExecuteCaptionOn(_ parser.Command, v *VHS) error {
++	if err := ensureLibass(); err != nil {
++		return err
++	}
++	v.KeyLogger.Enable()
++	return nil
++}
++
++// ExecuteCaptionOff disables caption key logging.
++func ExecuteCaptionOff(_ parser.Command, v *VHS) error {
++	v.KeyLogger.Disable()
++	return nil
++}
++
++// ExecuteSetCaptionFont sets the caption font family.
++func ExecuteSetCaptionFont(c parser.Command, v *VHS) error {
++	v.Options.Caption.Font = c.Args
++	return nil
++}
++
++// ExecuteSetCaptionFontSize sets the caption font size.
++func ExecuteSetCaptionFontSize(c parser.Command, v *VHS) error {
++	size, err := strconv.Atoi(c.Args)
++	if err != nil {
++		return fmt.Errorf("failed to parse caption font size: %w", err)
++	}
++	v.Options.Caption.FontSize = size
++	return nil
++}
++
++// ExecuteSetCaptionMaxKeys sets the caption sliding window size.
++func ExecuteSetCaptionMaxKeys(c parser.Command, v *VHS) error {
++	n, err := strconv.Atoi(c.Args)
++	if err != nil {
++		return fmt.Errorf("failed to parse caption max keys: %w", err)
++	}
++	v.Options.Caption.MaxKeysOnscreen = n
++	return nil
++}
++
++// ExecuteSetCaptionInactivityTimer sets the caption inactivity timer.
++func ExecuteSetCaptionInactivityTimer(c parser.Command, v *VHS) error {
++	dur, err := time.ParseDuration(c.Args)
++	if err != nil {
++		return fmt.Errorf("failed to parse caption inactivity timer: %w", err)
++	}
++	v.Options.Caption.InactivityTimerMs = int(dur.Milliseconds())
++	return nil
++}
++
++// ExecuteSetCaptionHighlightColor sets the caption highlight color.
++func ExecuteSetCaptionHighlightColor(c parser.Command, v *VHS) error {
++	v.Options.Caption.HighlightColor = c.Args
++	return nil
++}
++
++// ExecuteSetCaptionFontColor sets the caption text color for non-highlighted keys.
++func ExecuteSetCaptionFontColor(c parser.Command, v *VHS) error {
++	v.Options.Caption.FontColor = c.Args
++	return nil
++}
++
++// ExecuteSetCaptionBoxColor sets the caption background box fill color.
++func ExecuteSetCaptionBoxColor(c parser.Command, v *VHS) error {
++	v.Options.Caption.BoxColor = c.Args
++	return nil
++}
++
++// ExecuteSetCaptionBoxOpacity sets the caption box opacity.
++func ExecuteSetCaptionBoxOpacity(c parser.Command, v *VHS) error {
++	opacity, err := strconv.ParseFloat(c.Args, 64)
++	if err != nil {
++		return fmt.Errorf("failed to parse caption box opacity: %w", err)
++	}
++	v.Options.Caption.BoxOpacity = opacity
++	return nil
++}
++
++// ExecuteSetCaptionKeyStyle sets the caption key rendering style.
++func ExecuteSetCaptionKeyStyle(c parser.Command, v *VHS) error {
++	v.Options.Caption.KeyStyle = KeyStyle(c.Args)
++	return nil
++}
++
++// ExecuteSetCaptionMarginLeft sets the caption left margin.
++func ExecuteSetCaptionMarginLeft(c parser.Command, v *VHS) error {
++	m, err := strconv.Atoi(c.Args)
++	if err != nil {
++		return fmt.Errorf("failed to parse caption margin left: %w", err)
++	}
++	v.Options.Caption.MarginLeft = m
++	return nil
++}
++
++// ExecuteSetCaptionMarginRight sets the caption right margin.
++func ExecuteSetCaptionMarginRight(c parser.Command, v *VHS) error {
++	m, err := strconv.Atoi(c.Args)
++	if err != nil {
++		return fmt.Errorf("failed to parse caption margin right: %w", err)
++	}
++	v.Options.Caption.MarginRight = m
++	return nil
++}
++
++// ExecuteSetCaptionMarginVertical sets the caption vertical margin.
++func ExecuteSetCaptionMarginVertical(c parser.Command, v *VHS) error {
++	m, err := strconv.Atoi(c.Args)
++	if err != nil {
++		return fmt.Errorf("failed to parse caption margin vertical: %w", err)
++	}
++	v.Options.Caption.MarginVertical = m
++	return nil
++}
++
++// ExecuteSetCaptionAlignment sets the caption alignment.
++func ExecuteSetCaptionAlignment(c parser.Command, v *VHS) error {
++	v.Options.Caption.Alignment = CaptionAlignment(c.Args)
++	return nil
++}
++
++// ExecuteSetCaptionBoxPadding sets the caption box padding.
++func ExecuteSetCaptionBoxPadding(c parser.Command, v *VHS) error {
++	p, err := strconv.Atoi(c.Args)
++	if err != nil {
++		return fmt.Errorf("failed to parse caption box padding: %w", err)
++	}
++	v.Options.Caption.BoxPadding = p
++	return nil
++}
++
++// ExecuteOverlay records a text overlay event at the current frame timestamp.
++func ExecuteOverlay(c parser.Command, v *VHS) error {
++	durationMs := int64(defaultOverlayDurationMs)
++	if c.Options != "" {
++		dur, err := time.ParseDuration(c.Options)
++		if err != nil {
++			return fmt.Errorf("failed to parse overlay duration: %w", err)
++		}
++		durationMs = dur.Milliseconds()
++	}
++
++	frameNum := atomic.LoadInt64(&v.currentFrame)
++	timeMs := frameNum * 1000 / int64(v.Options.Video.Framerate)
++
++	v.OverlayEvents = append(v.OverlayEvents, OverlayEvent{
++		StartMs:    timeMs,
++		DurationMs: durationMs,
++		Text:       c.Args,
++	})
++	return nil
++}
++
++// ExecuteSetOverlayFont sets the overlay font family.
++func ExecuteSetOverlayFont(c parser.Command, v *VHS) error {
++	v.Options.Overlay.Font = c.Args
++	return nil
++}
++
++// ExecuteSetOverlayFontSize sets the overlay font size.
++func ExecuteSetOverlayFontSize(c parser.Command, v *VHS) error {
++	size, err := strconv.Atoi(c.Args)
++	if err != nil {
++		return fmt.Errorf("failed to parse overlay font size: %w", err)
++	}
++	v.Options.Overlay.FontSize = size
++	return nil
++}
++
++// ExecuteSetOverlayFontColor sets the overlay text color.
++func ExecuteSetOverlayFontColor(c parser.Command, v *VHS) error {
++	v.Options.Overlay.FontColor = c.Args
++	return nil
++}
++
++// ExecuteSetOverlayBoxColor sets the overlay background box fill color.
++func ExecuteSetOverlayBoxColor(c parser.Command, v *VHS) error {
++	v.Options.Overlay.BoxColor = c.Args
++	return nil
++}
++
++// ExecuteSetOverlayBoxOpacity sets the overlay box opacity.
++func ExecuteSetOverlayBoxOpacity(c parser.Command, v *VHS) error {
++	opacity, err := strconv.ParseFloat(c.Args, 64)
++	if err != nil {
++		return fmt.Errorf("failed to parse overlay box opacity: %w", err)
++	}
++	v.Options.Overlay.BoxOpacity = opacity
++	return nil
++}
++
++// ExecuteSetOverlayBoxPadding sets the overlay box padding.
++func ExecuteSetOverlayBoxPadding(c parser.Command, v *VHS) error {
++	p, err := strconv.Atoi(c.Args)
++	if err != nil {
++		return fmt.Errorf("failed to parse overlay box padding: %w", err)
++	}
++	v.Options.Overlay.BoxPadding = p
++	return nil
++}
++
++// ExecuteSetOverlayAlignment sets the overlay alignment.
++func ExecuteSetOverlayAlignment(c parser.Command, v *VHS) error {
++	v.Options.Overlay.Alignment = CaptionAlignment(c.Args)
++	return nil
++}
++
++// ExecuteSetOverlayMarginLeft sets the overlay left margin.
++func ExecuteSetOverlayMarginLeft(c parser.Command, v *VHS) error {
++	m, err := strconv.Atoi(c.Args)
++	if err != nil {
++		return fmt.Errorf("failed to parse overlay margin left: %w", err)
++	}
++	v.Options.Overlay.MarginLeft = m
++	return nil
++}
++
++// ExecuteSetOverlayMarginRight sets the overlay right margin.
++func ExecuteSetOverlayMarginRight(c parser.Command, v *VHS) error {
++	m, err := strconv.Atoi(c.Args)
++	if err != nil {
++		return fmt.Errorf("failed to parse overlay margin right: %w", err)
++	}
++	v.Options.Overlay.MarginRight = m
++	return nil
++}
++
++// ExecuteSetOverlayMarginVertical sets the overlay vertical margin.
++func ExecuteSetOverlayMarginVertical(c parser.Command, v *VHS) error {
++	m, err := strconv.Atoi(c.Args)
++	if err != nil {
++		return fmt.Errorf("failed to parse overlay margin vertical: %w", err)
++	}
++	v.Options.Overlay.MarginVertical = m
++	return nil
++}
++
+ func getTheme(s string) (Theme, error) {
+ 	if strings.TrimSpace(s) == "" {
+ 		return DefaultTheme, nil
+diff --git a/command_test.go b/command_test.go
+index 19ddc98..df62f94 100644
+--- a/command_test.go
++++ b/command_test.go
+@@ -8,12 +8,12 @@ import (
+ )
+ 
+ func TestCommand(t *testing.T) {
+-	const numberOfCommands = 31
++	const numberOfCommands = 34
+ 	if len(parser.CommandTypes) != numberOfCommands {
+ 		t.Errorf("Expected %d commands, got %d", numberOfCommands, len(parser.CommandTypes))
+ 	}
+ 
+-	const numberOfCommandFuncs = 31
++	const numberOfCommandFuncs = 34
+ 	if len(CommandFuncs) != numberOfCommandFuncs {
+ 		t.Errorf("Expected %d commands, got %d", numberOfCommandFuncs, len(CommandFuncs))
+ 	}
+diff --git a/evaluator.go b/evaluator.go
+index 5768b85..001428c 100644
+--- a/evaluator.go
++++ b/evaluator.go
+@@ -114,6 +114,9 @@ func Evaluate(ctx context.Context, tape string, out io.Writer, opts ...Evaluator
+ 	ctx, cancel := context.WithCancel(ctx) //nolint:gosec
+ 	ch := v.Record(ctx)
+ 
++	// Start key logging
++	v.KeyLogger.Start(&v.currentFrame, v.Options.Video.Framerate)
++
+ 	// Clean up temporary files at the end.
+ 	defer func() {
+ 		if v.Options.Video.Output.Frames != "" {
+@@ -182,6 +185,22 @@ func Evaluate(ctx context.Context, tape string, out io.Writer, opts ...Evaluator
+ 	}
+ 
+ 	teardown()
++
++	// Generate caption/overlay ASS file
++	hasCaptions := len(v.KeyLogger.Events()) > 0
++	hasOverlays := len(v.OverlayEvents) > 0
++
++	if hasCaptions || hasOverlays {
++		if err := ensureLibass(); err != nil {
++			return []error{err}
++		}
++		assPath, err := GenerateCaptionFile(v.KeyLogger.Events(), v.OverlayEvents, v.Options.Video, v.Options.Caption, v.Options.Overlay)
++		if err != nil {
++			return []error{err}
++		}
++		v.Options.Video.CaptionFile = assPath
++	}
++
+ 	if err := v.Render(); err != nil {
+ 		return []error{err}
+ 	}
+diff --git a/ffmpeg.go b/ffmpeg.go
+index d35823a..2eefcfb 100644
+--- a/ffmpeg.go
++++ b/ffmpeg.go
+@@ -104,6 +104,30 @@ func calcTermDimensions(style StyleOptions) (int, int) {
+ 	return width, height
+ }
+ 
++// WithCaptions adds ASS subtitle overlay to ffmpeg filter_complex.
++func (fb *FilterComplexBuilder) WithCaptions(assFilePath string) *FilterComplexBuilder {
++	if assFilePath == "" {
++		return fb
++	}
++	// Escape special characters for ffmpeg filter syntax
++	escaped := strings.ReplaceAll(assFilePath, `\`, `\\`)
++	escaped = strings.ReplaceAll(escaped, `:`, `\:`)
++	escaped = strings.ReplaceAll(escaped, `'`, `'\''`)
++
++	fb.filterComplex.WriteString(";")
++	_, _ = fmt.Fprintf(
++		fb.filterComplex,
++		`
++		[%s]ass='%s'[captioned]
++		`,
++		fb.prevStageName,
++		escaped,
++	)
++	fb.prevStageName = "captioned"
++
++	return fb
++}
++
+ // WithWindowBar adds window bar options to ffmepg filter_complex.
+ func (fb *FilterComplexBuilder) WithWindowBar(barStream int) *FilterComplexBuilder {
+ 	if fb.style.WindowBar != "" {
+diff --git a/go.mod b/go.mod
+index 04f86be..e62e378 100644
+--- a/go.mod
++++ b/go.mod
+@@ -13,16 +13,16 @@ require (
+ 	github.com/charmbracelet/wish v1.4.7
+ 	github.com/creack/pty v1.1.24
+ 	github.com/go-rod/rod v0.116.2
+-	github.com/hashicorp/go-version v1.9.0
++	github.com/hashicorp/go-version v1.8.0
+ 	github.com/mattn/go-isatty v0.0.20
+-	github.com/mattn/go-runewidth v0.0.22
++	github.com/mattn/go-runewidth v0.0.21
+ 	github.com/muesli/go-app-paths v0.2.2
+ 	github.com/muesli/mango-cobra v1.3.0
+ 	github.com/muesli/roff v0.1.0
+ 	github.com/muesli/termenv v0.16.0
+ 	github.com/spf13/cobra v1.10.2
+-	golang.org/x/crypto v0.49.0
+-	golang.org/x/term v0.41.0
++	golang.org/x/crypto v0.48.0
++	golang.org/x/term v0.40.0
+ )
+ 
+ require (
+@@ -67,8 +67,8 @@ require (
+ 	github.com/yuin/goldmark v1.7.13 // indirect
+ 	github.com/yuin/goldmark-emoji v1.0.6 // indirect
+ 	golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 // indirect
+-	golang.org/x/net v0.51.0 // indirect
+-	golang.org/x/sync v0.20.0 // indirect
+-	golang.org/x/sys v0.42.0 // indirect
+-	golang.org/x/text v0.35.0 // indirect
++	golang.org/x/net v0.49.0 // indirect
++	golang.org/x/sync v0.19.0 // indirect
++	golang.org/x/sys v0.41.0 // indirect
++	golang.org/x/text v0.34.0 // indirect
+ )
+diff --git a/go.sum b/go.sum
+index 421e226..20bd1b0 100644
+--- a/go.sum
++++ b/go.sum
+@@ -71,8 +71,8 @@ github.com/go-rod/rod v0.116.2 h1:A5t2Ky2A+5eD/ZJQr1EfsQSe5rms5Xof/qj296e+ZqA=
+ github.com/go-rod/rod v0.116.2/go.mod h1:H+CMO9SCNc2TJ2WfrG+pKhITz57uGNYU43qYHh438Mg=
+ github.com/gorilla/css v1.0.1 h1:ntNaBIghp6JmvWnxbZKANoLyuXTPZ4cAMlo6RyhlbO8=
+ github.com/gorilla/css v1.0.1/go.mod h1:BvnYkspnSzMmwRK+b8/xgNPLiIuNZr6vbZBTPQ2A3b0=
+-github.com/hashicorp/go-version v1.9.0 h1:CeOIz6k+LoN3qX9Z0tyQrPtiB1DFYRPfCIBtaXPSCnA=
+-github.com/hashicorp/go-version v1.9.0/go.mod h1:fltr4n8CU8Ke44wwGCBoEymUuxUHl09ZGVZPK5anwXA=
++github.com/hashicorp/go-version v1.8.0 h1:KAkNb1HAiZd1ukkxDFGmokVZe1Xy9HG6NUp+bPle2i4=
++github.com/hashicorp/go-version v1.8.0/go.mod h1:fltr4n8CU8Ke44wwGCBoEymUuxUHl09ZGVZPK5anwXA=
+ github.com/hexops/gotextdiff v1.0.3 h1:gitA9+qJrrTCsiCl7+kh75nPqQt1cx4ZkudSTLoUqJM=
+ github.com/hexops/gotextdiff v1.0.3/go.mod h1:pSWU5MAI3yDq+fZBTazCSJysOMbxWL1BSow5/V2vxeg=
+ github.com/inconshreveable/mousetrap v1.1.0 h1:wN+x4NVGpMsO7ErUn/mUI3vEoE6Jt13X2s0bqwp9tc8=
+@@ -84,8 +84,8 @@ github.com/mattn/go-isatty v0.0.20/go.mod h1:W+V8PltTTMOvKvAeJH7IuucS94S2C6jfK/D
+ github.com/mattn/go-localereader v0.0.1 h1:ygSAOl7ZXTx4RdPYinUpg6W99U8jWvWi9Ye2JC/oIi4=
+ github.com/mattn/go-localereader v0.0.1/go.mod h1:8fBrzywKY7BI3czFoHkuzRoWE9C+EiG4R1k4Cjx5p88=
+ github.com/mattn/go-runewidth v0.0.12/go.mod h1:RAqKPSqVFrSLVXbA8x7dzmKdmGzieGRCM46jaSJTDAk=
+-github.com/mattn/go-runewidth v0.0.22 h1:76lXsPn6FyHtTY+jt2fTTvsMUCZq1k0qwRsAMuxzKAk=
+-github.com/mattn/go-runewidth v0.0.22/go.mod h1:XBkDxAl56ILZc9knddidhrOlY5R/pDhgLpndooCuJAs=
++github.com/mattn/go-runewidth v0.0.21 h1:jJKAZiQH+2mIinzCJIaIG9Be1+0NR+5sz/lYEEjdM8w=
++github.com/mattn/go-runewidth v0.0.21/go.mod h1:XBkDxAl56ILZc9knddidhrOlY5R/pDhgLpndooCuJAs=
+ github.com/microcosm-cc/bluemonday v1.0.27 h1:MpEUotklkwCSLeH+Qdx1VJgNqLlpY2KXwXFM08ygZfk=
+ github.com/microcosm-cc/bluemonday v1.0.27/go.mod h1:jFi9vgW+H7c3V0lb6nR74Ib/DIB5OBs92Dimizgw2cA=
+ github.com/mitchellh/go-homedir v1.1.0 h1:lukF9ziXFxDFPkA1vsr5zpc1XuPDn/wFntq5mG+4E0Y=
+@@ -142,22 +142,22 @@ github.com/yuin/goldmark v1.7.13/go.mod h1:ip/1k0VRfGynBgxOz0yCqHrbZXhcjxyuS66Br
+ github.com/yuin/goldmark-emoji v1.0.6 h1:QWfF2FYaXwL74tfGOW5izeiZepUDroDJfWubQI9HTHs=
+ github.com/yuin/goldmark-emoji v1.0.6/go.mod h1:ukxJDKFpdFb5x0a5HqbdlcKtebh086iJpI31LTKmWuA=
+ go.yaml.in/yaml/v3 v3.0.4/go.mod h1:DhzuOOF2ATzADvBadXxruRBLzYTpT36CKvDb3+aBEFg=
+-golang.org/x/crypto v0.49.0 h1:+Ng2ULVvLHnJ/ZFEq4KdcDd/cfjrrjjNSXNzxg0Y4U4=
+-golang.org/x/crypto v0.49.0/go.mod h1:ErX4dUh2UM+CFYiXZRTcMpEcN8b/1gxEuv3nODoYtCA=
++golang.org/x/crypto v0.48.0 h1:/VRzVqiRSggnhY7gNRxPauEQ5Drw9haKdM0jqfcCFts=
++golang.org/x/crypto v0.48.0/go.mod h1:r0kV5h3qnFPlQnBSrULhlsRfryS2pmewsg+XfMgkVos=
+ golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56 h1:2dVuKD2vS7b0QIHQbpyTISPd0LeHDbnYEryqj5Q1ug8=
+ golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56/go.mod h1:M4RDyNAINzryxdtnbRXRL/OHtkFuWGRjvuhBJpk2IlY=
+-golang.org/x/net v0.51.0 h1:94R/GTO7mt3/4wIKpcR5gkGmRLOuE/2hNGeWq/GBIFo=
+-golang.org/x/net v0.51.0/go.mod h1:aamm+2QF5ogm02fjy5Bb7CQ0WMt1/WVM7FtyaTLlA9Y=
+-golang.org/x/sync v0.20.0 h1:e0PTpb7pjO8GAtTs2dQ6jYa5BWYlMuX047Dco/pItO4=
+-golang.org/x/sync v0.20.0/go.mod h1:9xrNwdLfx4jkKbNva9FpL6vEN7evnE43NNNJQ2LF3+0=
++golang.org/x/net v0.49.0 h1:eeHFmOGUTtaaPSGNmjBKpbng9MulQsJURQUAfUwY++o=
++golang.org/x/net v0.49.0/go.mod h1:/ysNB2EvaqvesRkuLAyjI1ycPZlQHM3q01F02UY/MV8=
++golang.org/x/sync v0.19.0 h1:vV+1eWNmZ5geRlYjzm2adRgW2/mcpevXNg50YZtPCE4=
++golang.org/x/sync v0.19.0/go.mod h1:9KTHXmSnoGruLpwFjVSX0lNNA75CykiMECbovNTZqGI=
+ golang.org/x/sys v0.0.0-20210809222454-d867a43fc93e/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+ golang.org/x/sys v0.6.0/go.mod h1:oPkhp1MJrh7nUepCBck5+mAzfO9JrbApNNgaTdGDITg=
+-golang.org/x/sys v0.42.0 h1:omrd2nAlyT5ESRdCLYdm3+fMfNFE/+Rf4bDIQImRJeo=
+-golang.org/x/sys v0.42.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
+-golang.org/x/term v0.41.0 h1:QCgPso/Q3RTJx2Th4bDLqML4W6iJiaXFq2/ftQF13YU=
+-golang.org/x/term v0.41.0/go.mod h1:3pfBgksrReYfZ5lvYM0kSO0LIkAl4Yl2bXOkKP7Ec2A=
+-golang.org/x/text v0.35.0 h1:JOVx6vVDFokkpaq1AEptVzLTpDe9KGpj5tR4/X+ybL8=
+-golang.org/x/text v0.35.0/go.mod h1:khi/HExzZJ2pGnjenulevKNX1W67CUy0AsXcNubPGCA=
++golang.org/x/sys v0.41.0 h1:Ivj+2Cp/ylzLiEU89QhWblYnOE9zerudt9Ftecq2C6k=
++golang.org/x/sys v0.41.0/go.mod h1:OgkHotnGiDImocRcuBABYBEXf8A9a87e/uXjp9XT3ks=
++golang.org/x/term v0.40.0 h1:36e4zGLqU4yhjlmxEaagx2KuYbJq3EwY8K943ZsHcvg=
++golang.org/x/term v0.40.0/go.mod h1:w2P8uVp06p2iyKKuvXIm7N/y0UCRt3UfJTfZ7oOpglM=
++golang.org/x/text v0.34.0 h1:oL/Qq0Kdaqxa1KbNeMKwQq0reLCCaFtqu2eNuSeNHbk=
++golang.org/x/text v0.34.0/go.mod h1:homfLqTYRFyVYemLBFl5GgL/DWEiH5wcsQ5gSh1yziA=
+ gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
+ gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
+ gopkg.in/yaml.v3 v3.0.1/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
+diff --git a/keylogger.go b/keylogger.go
+new file mode 100644
+index 0000000..7407829
+--- /dev/null
++++ b/keylogger.go
+@@ -0,0 +1,83 @@
++package main
++
++import (
++	"sync/atomic"
++)
++
++// KeyEvent represents a single key press and timing information.
++type KeyEvent struct {
++	// StartMs is the number of milliseconds relative to the recording start.
++	StartMs int64 `json:"ms"`
++
++	// Key is the string representation of the key pressed.
++	Key string `json:"key"`
++}
++
++// KeyLogger tracks key events during tape execution.
++type KeyLogger struct {
++	events    []KeyEvent
++	paused    bool
++	enabled   bool
++	frame     *int64 // pointer to shared frame counter
++	framerate int
++}
++
++// NewKeyLogger creates a new KeyLogger.
++func NewKeyLogger() *KeyLogger {
++	return &KeyLogger{
++		events: make([]KeyEvent, 0),
++	}
++}
++
++// Start begins key recording.
++//
++// The first parameter is a pointer to the shared frame counter that is being
++// incremented asynchronously by VHS as captures are being made. This is used
++// with the framerate parameter to compute when a key event was made.
++func (l *KeyLogger) Start(frame *int64, framerate int) {
++	l.frame = frame
++	l.framerate = framerate
++}
++
++// Pause suspends key logging until Resume is called.
++func (l *KeyLogger) Pause() {
++	l.paused = true
++}
++
++// Resume enables key logging after Pause is called.
++func (l *KeyLogger) Resume() {
++	l.paused = false
++}
++
++// Enable turns on caption key logging.
++func (l *KeyLogger) Enable() {
++	l.enabled = true
++}
++
++// Disable turns off caption key logging.
++func (l *KeyLogger) Disable() {
++	l.enabled = false
++}
++
++// LogKey records the current key and time at which it occurred with respect
++// to the current frame being captured. If key logging has not been started or
++// if it has been paused, this does nothing.
++func (l *KeyLogger) LogKey(key string) {
++	if l.frame == nil || l.paused || !l.enabled {
++		return
++	}
++
++	frameNum := atomic.LoadInt64(l.frame)
++	timeMs := frameNum * 1000 / int64(l.framerate)
++
++	event := KeyEvent{
++		StartMs: timeMs,
++		Key:     key,
++	}
++	l.events = append(l.events, event)
++}
++
++// Events returns the recorded key events.
++func (l *KeyLogger) Events() []KeyEvent {
++	return l.events
++}
+diff --git a/keylogger_test.go b/keylogger_test.go
+new file mode 100644
+index 0000000..c93019d
+--- /dev/null
++++ b/keylogger_test.go
+@@ -0,0 +1,224 @@
++package main
++
++import (
++	"testing"
++)
++
++func TestKeyLogger_Basic(t *testing.T) {
++	l := NewKeyLogger()
++
++	l.LogKey("a")
++	if len(l.events) != 0 {
++		t.Error("Expected no events when recorder has not been started")
++	}
++
++	var frame int64
++	l.Start(&frame, 50) // 50 fps
++	l.Enable()
++
++	l.LogKey("a")
++	frame = 5 // 100ms at 50fps
++	l.LogKey("b")
++
++	// Verify correct number of events
++	if len(l.events) != 2 {
++		t.Errorf("Expected 2 events, got %d", len(l.events))
++	}
++
++	// Verify ordering of events
++	if l.events[0].StartMs >= l.events[1].StartMs {
++		t.Error("Expected first event to have earlier timestamp")
++	}
++
++	// Verify correct timestamps
++	if l.events[0].StartMs != 0 {
++		t.Errorf("Expected first event at 0ms, got %d", l.events[0].StartMs)
++	}
++	if l.events[1].StartMs != 100 {
++		t.Errorf("Expected second event at 100ms, got %d", l.events[1].StartMs)
++	}
++
++	// Verify correct keys
++	if l.events[0].Key != "a" {
++		t.Errorf("Expected first event as 'a', got '%s'", l.events[0].Key)
++	}
++	if l.events[1].Key != "b" {
++		t.Errorf("Expected second event as 'b', got '%s'", l.events[1].Key)
++	}
++
++}
++
++func TestKeyLogger_PauseResume(t *testing.T) {
++	l := NewKeyLogger()
++
++	var frame int64
++	l.Start(&frame, 50) // 50 fps
++	l.Enable()
++
++	l.LogKey("a")
++	l.Pause()
++	l.LogKey("b") // this should not be logged
++	l.Resume()
++	l.LogKey("c")
++
++	// Verify correct number of events
++	if len(l.events) != 2 {
++		t.Errorf("Expected 2 events, got %d", len(l.events))
++	}
++
++	// Verify correct keys
++	if l.events[0].Key != "a" {
++		t.Errorf("Expected first event as 'a', got '%s'", l.events[0].Key)
++	}
++	if l.events[1].Key != "c" {
++		t.Errorf("Expected second event as 'c', got '%s'", l.events[1].Key)
++	}
++}
++
++func TestKeyLogger_Events(t *testing.T) {
++	l := NewKeyLogger()
++
++	var frame int64
++	l.Start(&frame, 50) // 50 fps
++	l.Enable()
++
++	l.LogKey("a")
++	l.LogKey("b")
++	l.LogKey("c")
++
++	events := l.Events()
++	if len(events) != 3 {
++		t.Errorf("Expected 3 events, got %d", len(events))
++	}
++
++	expectedKeys := []string{"a", "b", "c"}
++	for i, expected := range expectedKeys {
++		if events[i].Key != expected {
++			t.Errorf("Event %d: expected key '%s', got '%s'", i, expected, events[i].Key)
++		}
++	}
++}
++
++func TestKeyLogger_EnableDisable(t *testing.T) {
++	l := NewKeyLogger()
++
++	var frame int64
++	l.Start(&frame, 50)
++
++	// Not enabled by default — keys should be ignored
++	l.LogKey("a")
++	if len(l.events) != 0 {
++		t.Errorf("Expected 0 events when disabled, got %d", len(l.events))
++	}
++
++	l.Enable()
++	l.LogKey("b")
++	if len(l.events) != 1 {
++		t.Errorf("Expected 1 event after Enable, got %d", len(l.events))
++	}
++
++	l.Disable()
++	l.LogKey("c")
++	if len(l.events) != 1 {
++		t.Errorf("Expected 1 event after Disable, got %d", len(l.events))
++	}
++
++	l.Enable()
++	l.LogKey("d")
++	if len(l.events) != 2 {
++		t.Errorf("Expected 2 events after re-Enable, got %d", len(l.events))
++	}
++
++	if l.events[0].Key != "b" || l.events[1].Key != "d" {
++		t.Errorf("Expected keys 'b' and 'd', got '%s' and '%s'", l.events[0].Key, l.events[1].Key)
++	}
++}
++
++func TestKeyLogger_PauseAndEnabledInteraction(t *testing.T) {
++	l := NewKeyLogger()
++
++	var frame int64
++	l.Start(&frame, 50)
++	l.Enable()
++
++	l.LogKey("a") // logged
++	l.Pause()
++	l.LogKey("b") // paused — not logged
++	l.Resume()
++	l.LogKey("c") // logged (enabled + not paused)
++
++	// Disable while not paused
++	l.Disable()
++	l.LogKey("d") // disabled — not logged
++
++	// Pause while disabled, then enable
++	l.Pause()
++	l.Enable()
++	l.LogKey("e") // paused — not logged even though enabled
++
++	l.Resume()
++	l.LogKey("f") // enabled + not paused — logged
++
++	if len(l.events) != 3 {
++		t.Errorf("Expected 3 events, got %d", len(l.events))
++	}
++	expectedKeys := []string{"a", "c", "f"}
++	for i, expected := range expectedKeys {
++		if l.events[i].Key != expected {
++			t.Errorf("Event %d: expected key '%s', got '%s'", i, expected, l.events[i].Key)
++		}
++	}
++}
++
++func TestKeyLogger_FrameAlignment(t *testing.T) {
++	tests := []struct {
++		name      string
++		framerate int
++		frames    []int64
++		wantMs    []int64
++	}{
++		{
++			name:      "50fps",
++			framerate: 50,
++			frames:    []int64{0, 25, 50, 100},
++			wantMs:    []int64{0, 500, 1000, 2000},
++		},
++		{
++			name:      "30fps",
++			framerate: 30,
++			frames:    []int64{0, 15, 30, 60},
++			wantMs:    []int64{0, 500, 1000, 2000},
++		},
++		{
++			name:      "60fps",
++			framerate: 60,
++			frames:    []int64{0, 30, 60, 120},
++			wantMs:    []int64{0, 500, 1000, 2000},
++		},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			l := NewKeyLogger()
++			var frame int64
++			l.Start(&frame, tt.framerate)
++			l.Enable()
++
++			for _, f := range tt.frames {
++				frame = f
++				l.LogKey("a")
++			}
++
++			if len(l.events) != len(tt.wantMs) {
++				t.Errorf("Expected %d events, got %d", len(tt.wantMs), len(l.events))
++			}
++
++			for i, want := range tt.wantMs {
++				if l.events[i].StartMs != want {
++					t.Errorf("Event %d: expected %dms, got %dms", i, want, l.events[i].StartMs)
++				}
++			}
++
++		})
++	}
++}
+diff --git a/parser/parser.go b/parser/parser.go
+index 39a4dcb..4fbcda6 100644
+--- a/parser/parser.go
++++ b/parser/parser.go
+@@ -58,6 +58,9 @@ var CommandTypes = []CommandType{
+ 	token.COPY,
+ 	token.PASTE,
+ 	token.ENV,
++	token.OVERLAY,
++	token.CAPTION_ON,
++	token.CAPTION_OFF,
+ }
+ 
+ // String returns the string representation of the command.
+@@ -185,6 +188,12 @@ func (p *Parser) parseCommand() []Command {
+ 		return []Command{p.parsePaste()}
+ 	case token.ENV:
+ 		return []Command{p.parseEnv()}
++	case token.OVERLAY:
++		return []Command{p.parseOverlay()}
++	case token.CAPTION_ON:
++		return []Command{p.parseCaptionOn()}
++	case token.CAPTION_OFF:
++		return []Command{p.parseCaptionOff()}
+ 	default:
+ 		p.errors = append(p.errors, NewError(p.cur, "Invalid command: "+p.cur.Literal))
+ 		return []Command{{Type: token.ILLEGAL}}
+@@ -496,22 +505,10 @@ func (p *Parser) parseSet() Command {
+ 	case token.MARGIN_FILL:
+ 		cmd.Args = p.peek.Literal
+ 		p.nextToken()
+-
+-		marginFill := p.cur.Literal
+-
+-		// Check if margin color is a valid hex string
+-		if strings.HasPrefix(marginFill, "#") {
+-			_, err := strconv.ParseUint(marginFill[1:], 16, 64)
+-
+-			if err != nil || len(marginFill) != 7 {
+-				p.errors = append(
+-					p.errors,
+-					NewError(
+-						p.cur,
+-						"\""+marginFill+"\" is not a valid color.",
+-					),
+-				)
+-			}
++		// Margin fill can take non-hex values, so only check on hex values
++		if strings.HasPrefix(p.cur.Literal, "#") && !isValidHexColor(p.cur.Literal) {
++			p.errors = append(p.errors,
++				NewError(p.cur, "\""+p.cur.Literal+"\" is not a valid color."))
+ 		}
+ 	case token.CURSOR_BLINK:
+ 		cmd.Args = p.peek.Literal
+@@ -524,6 +521,123 @@ func (p *Parser) parseSet() Command {
+ 			)
+ 		}
+ 
++	case token.CAPTION_KEY_STYLE:
++		cmd.Args = p.peek.Literal
++		p.nextToken()
++		if p.cur.Literal != "vim" && p.cur.Literal != "icon" {
++			p.errors = append(
++				p.errors,
++				NewError(p.cur, "CaptionKeyStyle must be \"vim\" or \"icon\""),
++			)
++		}
++
++	case token.CAPTION_ALIGNMENT:
++		cmd.Args = p.peek.Literal
++		p.nextToken()
++		validAlignments := map[string]bool{
++			"bottom-left": true, "bottom-center": true, "bottom-right": true,
++			"middle-left": true, "middle-center": true, "middle-right": true,
++			"top-left": true, "top-center": true, "top-right": true,
++		}
++		if !validAlignments[p.cur.Literal] {
++			p.errors = append(
++				p.errors,
++				NewError(p.cur, "CaptionAlignment must be one of: bottom-left, bottom-center, bottom-right, middle-left, middle-center, middle-right, top-left, top-center, top-right"),
++			)
++		}
++
++	case token.CAPTION_BOX_OPACITY:
++		cmd.Args = p.peek.Literal
++		p.nextToken()
++		val, err := strconv.ParseFloat(p.cur.Literal, 64)
++		if err != nil || val < 0 || val > 1 {
++			p.errors = append(
++				p.errors,
++				NewError(p.cur, "CaptionBoxOpacity must be a float between 0 and 1"),
++			)
++		}
++
++	case token.CAPTION_FONT:
++		cmd.Args = p.peek.Literal
++		p.nextToken()
++		if len(p.cur.Literal) > 31 {
++			p.errors = append(p.errors,
++				NewError(p.cur, "CaptionFont must not be longer than 31 characters per ASS specification"))
++		}
++
++	case token.CAPTION_HIGHLIGHT_COLOR:
++		cmd.Args = p.peek.Literal
++		p.nextToken()
++		if !isValidHexColor(p.cur.Literal) {
++			p.errors = append(p.errors,
++				NewError(p.cur, "CaptionHighlightColor must be a hex color in #RRGGBB format"))
++		}
++
++	case token.CAPTION_FONT_COLOR:
++		cmd.Args = p.peek.Literal
++		p.nextToken()
++		if !isValidHexColor(p.cur.Literal) {
++			p.errors = append(p.errors,
++				NewError(p.cur, "CaptionFontColor must be a hex color in #RRGGBB format"))
++		}
++
++	case token.CAPTION_BOX_COLOR:
++		cmd.Args = p.peek.Literal
++		p.nextToken()
++		if !isValidHexColor(p.cur.Literal) {
++			p.errors = append(p.errors,
++				NewError(p.cur, "CaptionBoxColor must be a hex color in #RRGGBB format"))
++		}
++
++	case token.CAPTION_INACTIVITY_TIMER:
++		cmd.Args = p.parseTime()
++
++	case token.OVERLAY_FONT:
++		cmd.Args = p.peek.Literal
++		p.nextToken()
++		if len(p.cur.Literal) > 31 {
++			p.errors = append(p.errors,
++				NewError(p.cur, "OverlayFont must not be longer than 31 characters per ASS specification"))
++		}
++
++	case token.OVERLAY_FONT_COLOR:
++		cmd.Args = p.peek.Literal
++		p.nextToken()
++		if !isValidHexColor(p.cur.Literal) {
++			p.errors = append(p.errors,
++				NewError(p.cur, "OverlayFontColor must be a hex color in #RRGGBB format"))
++		}
++
++	case token.OVERLAY_BOX_COLOR:
++		cmd.Args = p.peek.Literal
++		p.nextToken()
++		if !isValidHexColor(p.cur.Literal) {
++			p.errors = append(p.errors,
++				NewError(p.cur, "OverlayBoxColor must be a hex color in #RRGGBB format"))
++		}
++
++	case token.OVERLAY_BOX_OPACITY:
++		cmd.Args = p.peek.Literal
++		p.nextToken()
++		val, err := strconv.ParseFloat(p.cur.Literal, 64)
++		if err != nil || val < 0 || val > 1 {
++			p.errors = append(p.errors,
++				NewError(p.cur, "OverlayBoxOpacity must be a float between 0 and 1"))
++		}
++
++	case token.OVERLAY_ALIGNMENT:
++		cmd.Args = p.peek.Literal
++		p.nextToken()
++		validAlignments := map[string]bool{
++			"bottom-left": true, "bottom-center": true, "bottom-right": true,
++			"middle-left": true, "middle-center": true, "middle-right": true,
++			"top-left": true, "top-center": true, "top-right": true,
++		}
++		if !validAlignments[p.cur.Literal] {
++			p.errors = append(p.errors,
++				NewError(p.cur, "OverlayAlignment must be one of: bottom-left, bottom-center, bottom-right, middle-left, middle-center, middle-right, top-left, top-center, top-right"))
++		}
++
+ 	default:
+ 		cmd.Args = p.peek.Literal
+ 		p.nextToken()
+@@ -574,6 +688,20 @@ func (p *Parser) parseShow() Command {
+ 	return cmd
+ }
+ 
++// parseCaptionOn parses a CaptionOn command.
++//
++//	CaptionOn
++func (p *Parser) parseCaptionOn() Command {
++	return Command{Type: token.CAPTION_ON}
++}
++
++// parseCaptionOff parses a CaptionOff command.
++//
++//	CaptionOff
++func (p *Parser) parseCaptionOff() Command {
++	return Command{Type: token.CAPTION_OFF}
++}
++
+ // parseType parses a type command.
+ // A type command takes a string to type.
+ //
+@@ -665,6 +793,31 @@ func (p *Parser) parseEnv() Command {
+ 	return cmd
+ }
+ 
++// parseOverlay parses an overlay command.
++// An overlay command takes an optional duration and a string to display.
++//
++//	Overlay[@<duration>] "<string>"
++func (p *Parser) parseOverlay() Command {
++	cmd := Command{Type: token.OVERLAY}
++
++	cmd.Options = p.parseSpeed()
++
++	if p.peek.Type != token.STRING {
++		p.errors = append(p.errors, NewError(p.peek, p.cur.Literal+" expects string"))
++	}
++
++	for p.peek.Type == token.STRING {
++		p.nextToken()
++		cmd.Args += p.cur.Literal
++
++		if p.peek.Type == token.STRING {
++			cmd.Args += " "
++		}
++	}
++
++	return cmd
++}
++
+ // parseSource parses source command.
+ // Source command takes a tape path to include in current tape.
+ //
+@@ -796,3 +949,12 @@ func isValidWindowBar(w string) bool {
+ 		w == "Colorful" || w == "ColorfulRight" ||
+ 		w == "Rings" || w == "RingsRight"
+ }
++
++// isValidHexColor checks if a string is a valid #RRGGBB hex color.
++func isValidHexColor(color string) bool {
++	if !strings.HasPrefix(color, "#") || len(color) != 7 {
++		return false
++	}
++	_, err := strconv.ParseUint(color[1:], 16, 64)
++	return err == nil
++}
+diff --git a/syntax.go b/syntax.go
+index b650cc2..6131c34 100644
+--- a/syntax.go
++++ b/syntax.go
+@@ -59,7 +59,10 @@ func Highlight(c parser.Command, faint bool) string {
+ 	case token.TYPE:
+ 		optionsStyle = TimeStyle
+ 		argsStyle = StringStyle
+-	case token.HIDE, token.SHOW:
++	case token.OVERLAY:
++		optionsStyle = TimeStyle
++		argsStyle = StringStyle
++	case token.HIDE, token.SHOW, token.CAPTION_ON, token.CAPTION_OFF:
+ 		return FaintStyle.Render(c.Type.String())
+ 	}
+ 
+diff --git a/token/token.go b/token/token.go
+index d0d98a1..080c60e 100644
+--- a/token/token.go
++++ b/token/token.go
+@@ -105,70 +105,126 @@ const (
+ 	WAIT_TIMEOUT    = "WAIT_TIMEOUT"
+ 	WAIT_PATTERN    = "WAIT_PATTERN"
+ 	CURSOR_BLINK    = "CURSOR_BLINK"
++
++	CAPTION_ON               = "CAPTION_ON"
++	CAPTION_OFF              = "CAPTION_OFF"
++	CAPTION_FONT             = "CAPTION_FONT"
++	CAPTION_FONT_SIZE        = "CAPTION_FONT_SIZE"
++	CAPTION_MAX_KEYS         = "CAPTION_MAX_KEYS"
++	CAPTION_INACTIVITY_TIMER = "CAPTION_INACTIVITY_TIMER"
++	CAPTION_HIGHLIGHT_COLOR  = "CAPTION_HIGHLIGHT_COLOR"
++	CAPTION_FONT_COLOR       = "CAPTION_FONT_COLOR"
++	CAPTION_BOX_COLOR        = "CAPTION_BOX_COLOR"
++	CAPTION_BOX_OPACITY      = "CAPTION_BOX_OPACITY"
++	CAPTION_KEY_STYLE        = "CAPTION_KEY_STYLE"
++	CAPTION_MARGIN_LEFT      = "CAPTION_MARGIN_LEFT"
++	CAPTION_MARGIN_RIGHT     = "CAPTION_MARGIN_RIGHT"
++	CAPTION_MARGIN_VERTICAL  = "CAPTION_MARGIN_VERTICAL"
++	CAPTION_ALIGNMENT        = "CAPTION_ALIGNMENT"
++	CAPTION_BOX_PADDING      = "CAPTION_BOX_PADDING"
++
++	OVERLAY                 = "OVERLAY"
++	OVERLAY_FONT            = "OVERLAY_FONT"
++	OVERLAY_FONT_SIZE       = "OVERLAY_FONT_SIZE"
++	OVERLAY_FONT_COLOR      = "OVERLAY_FONT_COLOR"
++	OVERLAY_BOX_COLOR       = "OVERLAY_BOX_COLOR"
++	OVERLAY_BOX_OPACITY     = "OVERLAY_BOX_OPACITY"
++	OVERLAY_BOX_PADDING     = "OVERLAY_BOX_PADDING"
++	OVERLAY_ALIGNMENT       = "OVERLAY_ALIGNMENT"
++	OVERLAY_MARGIN_LEFT     = "OVERLAY_MARGIN_LEFT"
++	OVERLAY_MARGIN_RIGHT    = "OVERLAY_MARGIN_RIGHT"
++	OVERLAY_MARGIN_VERTICAL = "OVERLAY_MARGIN_VERTICAL"
+ )
+ 
+ // Keywords maps keyword strings to tokens.
+ var Keywords = map[string]Type{
+-	"em":            EM,
+-	"px":            PX,
+-	"ms":            MILLISECONDS,
+-	"s":             SECONDS,
+-	"m":             MINUTES,
+-	"Set":           SET,
+-	"Sleep":         SLEEP,
+-	"Type":          TYPE,
+-	"Enter":         ENTER,
+-	"Space":         SPACE,
+-	"Backspace":     BACKSPACE,
+-	"Delete":        DELETE,
+-	"Insert":        INSERT,
+-	"Ctrl":          CTRL,
+-	"Alt":           ALT,
+-	"Shift":         SHIFT,
+-	"Down":          DOWN,
+-	"Left":          LEFT,
+-	"Right":         RIGHT,
+-	"Up":            UP,
+-	"PageUp":        PAGE_UP,
+-	"PageDown":      PAGE_DOWN,
+-	"ScrollUp":      SCROLL_UP,
+-	"ScrollDown":    SCROLL_DOWN,
+-	"Tab":           TAB,
+-	"Escape":        ESCAPE,
+-	"End":           END,
+-	"Hide":          HIDE,
+-	"Require":       REQUIRE,
+-	"Show":          SHOW,
+-	"Output":        OUTPUT,
+-	"Shell":         SHELL,
+-	"FontFamily":    FONT_FAMILY,
+-	"MarginFill":    MARGIN_FILL,
+-	"Margin":        MARGIN,
+-	"WindowBar":     WINDOW_BAR,
+-	"WindowBarSize": WINDOW_BAR_SIZE,
+-	"BorderRadius":  BORDER_RADIUS,
+-	"FontSize":      FONT_SIZE,
+-	"Framerate":     FRAMERATE,
+-	"Height":        HEIGHT,
+-	"LetterSpacing": LETTER_SPACING,
+-	"LineHeight":    LINE_HEIGHT,
+-	"PlaybackSpeed": PLAYBACK_SPEED,
+-	"TypingSpeed":   TYPING_SPEED,
+-	"Padding":       PADDING,
+-	"Theme":         THEME,
+-	"Width":         WIDTH,
+-	"LoopOffset":    LOOP_OFFSET,
+-	"WaitTimeout":   WAIT_TIMEOUT,
+-	"WaitPattern":   WAIT_PATTERN,
+-	"Wait":          WAIT,
+-	"Source":        SOURCE,
+-	"CursorBlink":   CURSOR_BLINK,
+-	"true":          BOOLEAN,
+-	"false":         BOOLEAN,
+-	"Screenshot":    SCREENSHOT,
+-	"Copy":          COPY,
+-	"Paste":         PASTE,
+-	"Env":           ENV,
++	"em":                     EM,
++	"px":                     PX,
++	"ms":                     MILLISECONDS,
++	"s":                      SECONDS,
++	"m":                      MINUTES,
++	"Set":                    SET,
++	"Sleep":                  SLEEP,
++	"Type":                   TYPE,
++	"Enter":                  ENTER,
++	"Space":                  SPACE,
++	"Backspace":              BACKSPACE,
++	"Delete":                 DELETE,
++	"Insert":                 INSERT,
++	"Ctrl":                   CTRL,
++	"Alt":                    ALT,
++	"Shift":                  SHIFT,
++	"Down":                   DOWN,
++	"Left":                   LEFT,
++	"Right":                  RIGHT,
++	"Up":                     UP,
++	"PageUp":                 PAGE_UP,
++	"PageDown":               PAGE_DOWN,
++	"ScrollUp":               SCROLL_UP,
++	"ScrollDown":             SCROLL_DOWN,
++	"Tab":                    TAB,
++	"Escape":                 ESCAPE,
++	"End":                    END,
++	"Hide":                   HIDE,
++	"Require":                REQUIRE,
++	"Show":                   SHOW,
++	"Output":                 OUTPUT,
++	"Shell":                  SHELL,
++	"FontFamily":             FONT_FAMILY,
++	"MarginFill":             MARGIN_FILL,
++	"Margin":                 MARGIN,
++	"WindowBar":              WINDOW_BAR,
++	"WindowBarSize":          WINDOW_BAR_SIZE,
++	"BorderRadius":           BORDER_RADIUS,
++	"FontSize":               FONT_SIZE,
++	"Framerate":              FRAMERATE,
++	"Height":                 HEIGHT,
++	"LetterSpacing":          LETTER_SPACING,
++	"LineHeight":             LINE_HEIGHT,
++	"PlaybackSpeed":          PLAYBACK_SPEED,
++	"TypingSpeed":            TYPING_SPEED,
++	"Padding":                PADDING,
++	"Theme":                  THEME,
++	"Width":                  WIDTH,
++	"LoopOffset":             LOOP_OFFSET,
++	"WaitTimeout":            WAIT_TIMEOUT,
++	"WaitPattern":            WAIT_PATTERN,
++	"Wait":                   WAIT,
++	"Source":                 SOURCE,
++	"CursorBlink":            CURSOR_BLINK,
++	"CaptionOn":              CAPTION_ON,
++	"CaptionOff":             CAPTION_OFF,
++	"CaptionFont":            CAPTION_FONT,
++	"CaptionFontSize":        CAPTION_FONT_SIZE,
++	"CaptionMaxKeys":         CAPTION_MAX_KEYS,
++	"CaptionInactivityTimer": CAPTION_INACTIVITY_TIMER,
++	"CaptionHighlightColor":  CAPTION_HIGHLIGHT_COLOR,
++	"CaptionFontColor":       CAPTION_FONT_COLOR,
++	"CaptionBoxColor":        CAPTION_BOX_COLOR,
++	"CaptionBoxOpacity":      CAPTION_BOX_OPACITY,
++	"CaptionKeyStyle":        CAPTION_KEY_STYLE,
++	"CaptionMarginLeft":      CAPTION_MARGIN_LEFT,
++	"CaptionMarginRight":     CAPTION_MARGIN_RIGHT,
++	"CaptionMarginVertical":  CAPTION_MARGIN_VERTICAL,
++	"CaptionAlignment":       CAPTION_ALIGNMENT,
++	"CaptionBoxPadding":      CAPTION_BOX_PADDING,
++	"Overlay":                OVERLAY,
++	"OverlayFont":            OVERLAY_FONT,
++	"OverlayFontSize":        OVERLAY_FONT_SIZE,
++	"OverlayFontColor":       OVERLAY_FONT_COLOR,
++	"OverlayBoxColor":        OVERLAY_BOX_COLOR,
++	"OverlayBoxOpacity":      OVERLAY_BOX_OPACITY,
++	"OverlayBoxPadding":      OVERLAY_BOX_PADDING,
++	"OverlayAlignment":       OVERLAY_ALIGNMENT,
++	"OverlayMarginLeft":      OVERLAY_MARGIN_LEFT,
++	"OverlayMarginRight":     OVERLAY_MARGIN_RIGHT,
++	"OverlayMarginVertical":  OVERLAY_MARGIN_VERTICAL,
++	"true":                   BOOLEAN,
++	"false":                  BOOLEAN,
++	"Screenshot":             SCREENSHOT,
++	"Copy":                   COPY,
++	"Paste":                  PASTE,
++	"Env":                    ENV,
+ }
+ 
+ // IsSetting returns whether a token is a setting.
+@@ -177,7 +233,16 @@ func IsSetting(t Type) bool {
+ 	case SHELL, FONT_FAMILY, FONT_SIZE, LETTER_SPACING, LINE_HEIGHT,
+ 		FRAMERATE, TYPING_SPEED, THEME, PLAYBACK_SPEED, HEIGHT, WIDTH,
+ 		PADDING, LOOP_OFFSET, MARGIN_FILL, MARGIN, WINDOW_BAR,
+-		WINDOW_BAR_SIZE, BORDER_RADIUS, CURSOR_BLINK, WAIT_TIMEOUT, WAIT_PATTERN:
++		WINDOW_BAR_SIZE, BORDER_RADIUS, CURSOR_BLINK, WAIT_TIMEOUT, WAIT_PATTERN,
++		CAPTION_FONT, CAPTION_FONT_SIZE, CAPTION_MAX_KEYS, CAPTION_INACTIVITY_TIMER,
++		CAPTION_HIGHLIGHT_COLOR, CAPTION_FONT_COLOR, CAPTION_BOX_COLOR,
++		CAPTION_BOX_OPACITY, CAPTION_KEY_STYLE,
++		CAPTION_MARGIN_LEFT, CAPTION_MARGIN_RIGHT, CAPTION_MARGIN_VERTICAL,
++		CAPTION_ALIGNMENT, CAPTION_BOX_PADDING,
++		OVERLAY_FONT, OVERLAY_FONT_SIZE, OVERLAY_FONT_COLOR,
++		OVERLAY_BOX_COLOR, OVERLAY_BOX_OPACITY, OVERLAY_BOX_PADDING,
++		OVERLAY_ALIGNMENT, OVERLAY_MARGIN_LEFT, OVERLAY_MARGIN_RIGHT,
++		OVERLAY_MARGIN_VERTICAL:
+ 		return true
+ 	default:
+ 		return false
+@@ -190,7 +255,8 @@ func IsCommand(t Type) bool {
+ 	case TYPE, SLEEP,
+ 		UP, DOWN, RIGHT, LEFT, PAGE_UP, PAGE_DOWN, SCROLL_UP, SCROLL_DOWN,
+ 		ENTER, BACKSPACE, DELETE, TAB,
+-		ESCAPE, HOME, INSERT, END, CTRL, SOURCE, SCREENSHOT, COPY, PASTE, WAIT:
++		ESCAPE, HOME, INSERT, END, CTRL, SOURCE, SCREENSHOT, COPY, PASTE, WAIT,
++		OVERLAY, CAPTION_ON, CAPTION_OFF:
+ 		return true
+ 	default:
+ 		return false
+diff --git a/vhs.go b/vhs.go
+index 235e7b4..bed1961 100644
+--- a/vhs.go
++++ b/vhs.go
+@@ -12,6 +12,7 @@ import (
+ 	"regexp"
+ 	"strings"
+ 	"sync"
++	"sync/atomic"
+ 	"time"
+ 
+ 	"github.com/go-rod/rod"
+@@ -21,18 +22,21 @@ import (
+ 
+ // VHS is the object that controls the setup.
+ type VHS struct {
+-	Options      *Options
+-	Errors       []error
+-	Page         *rod.Page
+-	browser      *rod.Browser
+-	TextCanvas   *rod.Element
+-	CursorCanvas *rod.Element
+-	mutex        *sync.Mutex
+-	started      bool
+-	recording    bool
+-	tty          *exec.Cmd
+-	totalFrames  int
+-	close        func() error
++	Options       *Options
++	Errors        []error
++	Page          *rod.Page
++	browser       *rod.Browser
++	TextCanvas    *rod.Element
++	CursorCanvas  *rod.Element
++	mutex         *sync.Mutex
++	started       bool
++	recording     bool
++	tty           *exec.Cmd
++	totalFrames   int
++	currentFrame  int64
++	close         func() error
++	KeyLogger     *KeyLogger
++	OverlayEvents []OverlayEvent
+ }
+ 
+ // Options is the set of options for the setup.
+@@ -52,6 +56,8 @@ type Options struct {
+ 	CursorBlink   bool
+ 	Screenshot    ScreenshotOptions
+ 	Style         StyleOptions
++	Caption       CaptionOptions
++	Overlay       OverlayOptions
+ }
+ 
+ const (
+@@ -107,6 +113,8 @@ func DefaultVHSOptions() Options {
+ 		Screenshot:    screenshot,
+ 		WaitTimeout:   defaultWaitTimeout,
+ 		WaitPattern:   defaultWaitPattern,
++		Caption:       DefaultCaptionOptions(),
++		Overlay:       DefaultOverlayOptions(),
+ 	}
+ }
+ 
+@@ -118,6 +126,7 @@ func New() VHS {
+ 		Options:   &opts,
+ 		recording: true,
+ 		mutex:     mu,
++		KeyLogger: NewKeyLogger(),
+ 	}
+ }
+ 
+@@ -359,6 +368,7 @@ func (vhs *VHS) Record(ctx context.Context) <-chan error {
+ 				}
+ 
+ 				counter++
++				atomic.StoreInt64(&vhs.currentFrame, int64(counter))
+ 				if err := os.WriteFile(
+ 					filepath.Join(vhs.Options.Video.Input, fmt.Sprintf(cursorFrameFormat, counter)),
+ 					cursor,
+@@ -393,6 +403,7 @@ func (vhs *VHS) ResumeRecording() {
+ 	defer vhs.mutex.Unlock()
+ 
+ 	vhs.recording = true
++	vhs.KeyLogger.Resume()
+ }
+ 
+ // PauseRecording indicates to VHS that the recording should be paused.
+@@ -401,6 +412,7 @@ func (vhs *VHS) PauseRecording() {
+ 	defer vhs.mutex.Unlock()
+ 
+ 	vhs.recording = false
++	vhs.KeyLogger.Pause()
+ }
+ 
+ // ScreenshotNextFrame indicates to VHS that screenshot of next frame must be taken.
+diff --git a/video.go b/video.go
+index 5548a52..cd6d154 100644
+--- a/video.go
++++ b/video.go
+@@ -56,6 +56,7 @@ type VideoOptions struct {
+ 	Output        VideoOutputs
+ 	StartingFrame int
+ 	Style         *StyleOptions
++	CaptionFile   string
+ }
+ 
+ const (
+@@ -131,6 +132,7 @@ func buildFFopts(opts VideoOptions, targetFile string) []string {
+ 		WithCorner()
+ 
+ 	filterBuilder := NewVideoFilterBuilder(&opts).
++		WithCaptions(opts.CaptionFile).
+ 		WithWindowBar(streamBuilder.barStream).
+ 		WithBorderRadius(streamBuilder.cornerStream).
+ 		WithMarginFill(streamBuilder.marginStream)
