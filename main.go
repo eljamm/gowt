@@ -74,9 +74,9 @@ type InsertState struct {
 func (s InsertState) HandleKey(e KeyEvent) (State, Action, RenderRequest) {
 	switch e.Key {
 	case tcell.KeyUp, tcell.KeyCtrlP, tcell.KeyCtrlK:
-		return s, ActionDraw, RenderRequest{Query: s.query, ModeIndicator: " I "}
+		return s, ActionDraw, RenderRequest{Query: s.query, ModeIndicator: " I ", NavDelta: -1}
 	case tcell.KeyDown, tcell.KeyCtrlN, tcell.KeyCtrlJ:
-		return s, ActionDraw, RenderRequest{Query: s.query, ModeIndicator: " I "}
+		return s, ActionDraw, RenderRequest{Query: s.query, ModeIndicator: " I ", NavDelta: 1}
 	case tcell.KeyCtrlD:
 		// Page down (half window)
 		return s, ActionDraw, RenderRequest{Query: s.query, ModeIndicator: " I ", NavPage: 1}
@@ -116,9 +116,9 @@ type NormalState struct {
 func (s NormalState) HandleKey(e KeyEvent) (State, Action, RenderRequest) {
 	switch e.Key {
 	case tcell.KeyUp, tcell.KeyCtrlP, tcell.KeyCtrlK:
-		return s, ActionDraw, RenderRequest{ModeIndicator: " N "}
+		return s, ActionDraw, RenderRequest{ModeIndicator: " N ", NavDelta: -1}
 	case tcell.KeyDown, tcell.KeyCtrlN, tcell.KeyCtrlJ:
-		return s, ActionDraw, RenderRequest{ModeIndicator: " N "}
+		return s, ActionDraw, RenderRequest{ModeIndicator: " N ", NavDelta: 1}
 	case tcell.KeyCtrlD:
 		delta := s.count
 		if delta == 0 {
@@ -578,32 +578,6 @@ func selectWorktreeTUI(worktrees []WorktreeInfo, commander GitCommander) (int, e
 		var keyEvent KeyEvent
 		if ev, ok := ev.(*tcell.EventKey); ok {
 			keyEvent = KeyEvent{Key: ev.Key(), Rune: ev.Rune()}
-		}
-
-		// Handle navigation in main loop (need to update selected)
-		switch keyEvent.Key {
-		case tcell.KeyUp, tcell.KeyCtrlP, tcell.KeyCtrlK:
-			if selected > 0 {
-				selected--
-			}
-		case tcell.KeyDown, tcell.KeyCtrlN, tcell.KeyCtrlJ:
-			visible := displayWorktrees(currentQuery)
-			if selected < len(visible)-1 {
-				selected++
-			}
-		}
-
-		_, screenHeight := screen.Size()
-		listHeight := screenHeight - 1
-		windowRatio := 0.75
-		windowHeight := int(float64(listHeight) * windowRatio)
-		if windowHeight < 1 {
-			windowHeight = 1
-		}
-		if selected < windowTop {
-			windowTop = selected
-		} else if selected >= windowTop+windowHeight {
-			windowTop = selected - windowHeight + 1
 		}
 
 		var nextState State
