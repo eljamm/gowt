@@ -5,9 +5,8 @@
 Vibe rewrite of [gko/gwt](https://github.com/gko/gwt/blob/master/gwt.sh).
 
 > [!WARNING]
-> This project is for experimenting with LLMs and to scratch a personal itch.
-> As such, it's understandable if you don't want to use it, and you should
-> check out the original project, instead.
+> This project was written by an LLM under heavy human guidance and review.
+> If you prefer purely human-written code, use the original project, instead.
 
 ## Features
 
