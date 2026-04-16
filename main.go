@@ -31,6 +31,8 @@ var (
 	arrowFg        = tcell.ColorRed
 )
 
+const windowRatio = 0.75
+
 // State Machine Types
 
 type Action int
@@ -389,7 +391,6 @@ func selectWorktreeTUI(worktrees []WorktreeInfo, commander GitCommander) (int, e
 	if selected >= 0 {
 		_, screenHeight := screen.Size()
 		listHeight := screenHeight - 1
-		windowRatio := 0.75
 		windowHeight := int(float64(listHeight) * windowRatio)
 		if windowHeight > 1 && selected >= windowHeight-1 {
 			windowTop = selected - windowHeight + 1
@@ -445,7 +446,6 @@ func selectWorktreeTUI(worktrees []WorktreeInfo, commander GitCommander) (int, e
 		}
 
 		listHeight := height - 1
-		windowRatio := 0.75
 		windowHeight := int(float64(listHeight) * windowRatio)
 		if windowHeight < 1 {
 			windowHeight = 1
@@ -606,7 +606,6 @@ func selectWorktreeTUI(worktrees []WorktreeInfo, commander GitCommander) (int, e
 			} else if req.NavPage != 0 {
 				_, screenHeight := screen.Size()
 				listHeight := screenHeight - 1
-				windowRatio := 0.75
 				windowHeight := int(float64(listHeight) * windowRatio)
 				if windowHeight < 1 {
 					windowHeight = 1
@@ -643,7 +642,6 @@ func selectWorktreeTUI(worktrees []WorktreeInfo, commander GitCommander) (int, e
 
 			_, screenHeight := screen.Size()
 			listHeight := screenHeight - 1
-			windowRatio := 0.75
 			windowHeight := int(float64(listHeight) * windowRatio)
 			if windowHeight < 1 {
 				windowHeight = 1
