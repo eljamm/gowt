@@ -135,7 +135,9 @@ func ExtractBranch(line string) string {
 	return ""
 }
 
-var SelectWorktreeTUI func(worktrees []tui.WorktreeInfo, commander git.Commander) (int, error)
+var SelectWorktreeTUI func(worktrees []tui.WorktreeInfo, commander git.Commander, colors tui.TUIColors) (int, error)
+
+var TUIColors tui.TUIColors
 
 func RunJump(cmd *cobra.Command, args []string, commander git.Commander) {
 	if len(args) > 0 {
@@ -152,7 +154,7 @@ func RunJump(cmd *cobra.Command, args []string, commander git.Commander) {
 		Fail(err)
 	}
 
-	idx, err := SelectWorktreeTUI(worktrees, commander)
+	idx, err := SelectWorktreeTUI(worktrees, commander, TUIColors)
 	if err != nil {
 		Fail(err)
 	}
@@ -196,7 +198,7 @@ func RunRemove(cmd *cobra.Command, args []string, commander git.Commander) {
 		Fail(err)
 	}
 
-	idx, err := SelectWorktreeTUI(worktrees, commander)
+	idx, err := SelectWorktreeTUI(worktrees, commander, TUIColors)
 	if err != nil {
 		Fail(err)
 	}

@@ -5,44 +5,10 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
+	"gwt/internal/app"
 	"gwt/internal/git"
+	"gwt/internal/tui"
 )
-
-type mockGitCommander struct {
-	worktreeListOutput string
-	worktreeListErr    error
-	revParseOutput     string
-	revParseErr        error
-	gitCommonDirOutput string
-	gitCommonDirErr    error
-	worktreeRemoveErr  error
-	worktreeAddErr     error
-	worktreeAddNewErr  error
-}
-
-func (m *mockGitCommander) worktreeList() (string, error) {
-	return m.worktreeListOutput, m.worktreeListErr
-}
-
-func (m *mockGitCommander) revParse(showToplevel bool) (string, error) {
-	return m.revParseOutput, m.revParseErr
-}
-
-func (m *mockGitCommander) gitCommonDir() (string, error) {
-	return m.gitCommonDirOutput, m.gitCommonDirErr
-}
-
-func (m *mockGitCommander) worktreeRemove(path string, force bool) error {
-	return m.worktreeRemoveErr
-}
-
-func (m *mockGitCommander) worktreeAdd(path, branch string) error {
-	return m.worktreeAddErr
-}
-
-func (m *mockGitCommander) worktreeAddNew(path, branch string) error {
-	return m.worktreeAddNewErr
-}
 
 func TestExtractBranch(t *testing.T) {
 	tests := []struct {
@@ -94,9 +60,9 @@ func TestExtractBranch(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := extractBranch(tt.input)
+			result := app.ExtractBranch(tt.input)
 			if result != tt.expected {
-				t.Errorf("extractBranch(%q) = %q, want %q", tt.input, result, tt.expected)
+				t.Errorf("ExtractBranch(%q) = %q, want %q", tt.input, result, tt.expected)
 			}
 		})
 	}
@@ -159,10 +125,10 @@ func TestGetWorktreesSorted(t *testing.T) {
 				RevParseOutput:     tt.gitRoot,
 			}
 
-			result, err := getWorktreesSorted(commander)
+			result, err := app.GetWorktreesSorted(commander)
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("getWorktreesSorted() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("GetWorktreesSorted() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
@@ -172,7 +138,7 @@ func TestGetWorktreesSorted(t *testing.T) {
 
 			if len(result) != tt.expectedCount {
 				t.Errorf(
-					"getWorktreesSorted() returned %d items, want %d",
+					"GetWorktreesSorted() returned %d items, want %d",
 					len(result),
 					tt.expectedCount,
 				)
@@ -240,11 +206,11 @@ func TestFuzzyMatchPositions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := fuzzyMatchPositions(tt.query, tt.target)
+			result := tui.FuzzyMatchPositions(tt.query, tt.target)
 			if tt.wantNil {
 				if result != nil {
 					t.Errorf(
-						"fuzzyMatchPositions(%q, %q) = %v, want nil",
+						"FuzzyMatchPositions(%q, %q) = %v, want nil",
 						tt.query,
 						tt.target,
 						result,
@@ -254,7 +220,7 @@ func TestFuzzyMatchPositions(t *testing.T) {
 			}
 			if result == nil {
 				t.Errorf(
-					"fuzzyMatchPositions(%q, %q) = nil, want %d positions",
+					"FuzzyMatchPositions(%q, %q) = nil, want %d positions",
 					tt.query,
 					tt.target,
 					tt.wantLen,
@@ -262,7 +228,7 @@ func TestFuzzyMatchPositions(t *testing.T) {
 			}
 			if len(result) != tt.wantLen {
 				t.Errorf(
-					"fuzzyMatchPositions(%q, %q) returned %d positions, want %d",
+					"FuzzyMatchPositions(%q, %q) returned %d positions, want %d",
 					tt.query,
 					tt.target,
 					len(result),
@@ -315,11 +281,11 @@ func TestFindWorktreePathForBranch(t *testing.T) {
 				RevParseOutput:     tt.gitRoot,
 			}
 
-			path, err := findWorktreePathForBranch(tt.branch, commander)
+			path, err := app.FindWorktreePathForBranch(tt.branch, commander)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf(
-					"findWorktreePathForBranch(%q) error = %v, wantErr %v",
+					"FindWorktreePathForBranch(%q) error = %v, wantErr %v",
 					tt.branch,
 					err,
 					tt.wantErr,
@@ -329,7 +295,7 @@ func TestFindWorktreePathForBranch(t *testing.T) {
 
 			if !tt.wantErr && path != tt.wantPath {
 				t.Errorf(
-					"findWorktreePathForBranch(%q) = %q, want %q",
+					"FindWorktreePathForBranch(%q) = %q, want %q",
 					tt.branch,
 					path,
 					tt.wantPath,
@@ -341,192 +307,192 @@ func TestFindWorktreePathForBranch(t *testing.T) {
 
 func TestStateTransitions(t *testing.T) {
 	t.Run("NormalState navigation", func(t *testing.T) {
-		state := NormalState{}
+		state := tui.NormalState{}
 
-		_, _, req := state.HandleKey(KeyEvent{Rune: 'g'})
+		_, _, req := state.HandleKey(tui.KeyEvent{Rune: 'g'})
 		if !req.NavTop {
 			t.Error("expected NavTop for 'g'")
 		}
 
-		_, _, req = state.HandleKey(KeyEvent{Rune: 'G'})
+		_, _, req = state.HandleKey(tui.KeyEvent{Rune: 'G'})
 		if !req.NavBottom {
 			t.Error("expected NavBottom for 'G'")
 		}
 
-		_, _, req = state.HandleKey(KeyEvent{Rune: 'j'})
+		_, _, req = state.HandleKey(tui.KeyEvent{Rune: 'j'})
 		if req.NavDelta != 1 {
 			t.Errorf("NavDelta = %d, want 1 for 'j'", req.NavDelta)
 		}
 
-		_, _, req = state.HandleKey(KeyEvent{Rune: 'k'})
+		_, _, req = state.HandleKey(tui.KeyEvent{Rune: 'k'})
 		if req.NavDelta != -1 {
 			t.Errorf("NavDelta = %d, want -1 for 'k'", req.NavDelta)
 		}
 
-		_, _, req = state.HandleKey(KeyEvent{Rune: 'J'})
+		_, _, req = state.HandleKey(tui.KeyEvent{Rune: 'J'})
 		if req.NavDelta != 1 {
 			t.Errorf("NavDelta = %d, want 1 for 'J'", req.NavDelta)
 		}
 
-		_, _, req = state.HandleKey(KeyEvent{Rune: 'K'})
+		_, _, req = state.HandleKey(tui.KeyEvent{Rune: 'K'})
 		if req.NavDelta != -1 {
 			t.Errorf("NavDelta = %d, want -1 for 'K'", req.NavDelta)
 		}
 	})
 
 	t.Run("NormalState with count prefix", func(t *testing.T) {
-		state := NormalState{count: 3}
+		state := tui.NormalState{Count: 3}
 
-		_, _, req := state.HandleKey(KeyEvent{Rune: 'k'})
+		_, _, req := state.HandleKey(tui.KeyEvent{Rune: 'k'})
 		if req.NavDelta != -3 {
 			t.Errorf("NavDelta = %d, want -3 for '3k'", req.NavDelta)
 		}
 
-		state = NormalState{count: 3}
-		_, _, req = state.HandleKey(KeyEvent{Rune: 'j'})
+		state = tui.NormalState{Count: 3}
+		_, _, req = state.HandleKey(tui.KeyEvent{Rune: 'j'})
 		if req.NavDelta != 3 {
 			t.Errorf("NavDelta = %d, want 3 for '3j'", req.NavDelta)
 		}
 
-		state = NormalState{count: 20}
-		_, _, req = state.HandleKey(KeyEvent{Rune: 'g'})
+		state = tui.NormalState{Count: 20}
+		_, _, req = state.HandleKey(tui.KeyEvent{Rune: 'g'})
 		if req.NavTarget != 19 {
 			t.Errorf("NavTarget = %d, want 19 for '20g'", req.NavTarget)
 		}
 
-		state = NormalState{count: 1}
-		_, _, req = state.HandleKey(KeyEvent{Rune: 'G'})
+		state = tui.NormalState{Count: 1}
+		_, _, req = state.HandleKey(tui.KeyEvent{Rune: 'G'})
 		if req.NavTarget != 0 {
 			t.Errorf("NavTarget = %d, want 0 for '1G'", req.NavTarget)
 		}
 
-		state = NormalState{count: 0}
-		_, _, req = state.HandleKey(KeyEvent{Rune: 'g'})
+		state = tui.NormalState{Count: 0}
+		_, _, req = state.HandleKey(tui.KeyEvent{Rune: 'g'})
 		if !req.NavTop {
 			t.Error("expected NavTop for plain 'g'")
 		}
 
-		state = NormalState{count: 0}
-		_, _, req = state.HandleKey(KeyEvent{Rune: 'G'})
+		state = tui.NormalState{Count: 0}
+		_, _, req = state.HandleKey(tui.KeyEvent{Rune: 'G'})
 		if !req.NavBottom {
 			t.Error("expected NavBottom for plain 'G'")
 		}
 	})
 
 	t.Run("NormalState digit accumulation", func(t *testing.T) {
-		state := NormalState{}
+		state := tui.NormalState{}
 
-		nextState, _, _ := state.HandleKey(KeyEvent{Rune: '3'})
-		state = nextState.(NormalState)
-		if state.count != 3 {
-			t.Errorf("count = %d, want 3", state.count)
+		nextState, _, _ := state.HandleKey(tui.KeyEvent{Rune: '3'})
+		state = nextState.(tui.NormalState)
+		if state.Count != 3 {
+			t.Errorf("Count = %d, want 3", state.Count)
 		}
 
-		nextState, _, _ = state.HandleKey(KeyEvent{Rune: '2'})
-		state = nextState.(NormalState)
-		if state.count != 32 {
-			t.Errorf("count = %d, want 32", state.count)
+		nextState, _, _ = state.HandleKey(tui.KeyEvent{Rune: '2'})
+		state = nextState.(tui.NormalState)
+		if state.Count != 32 {
+			t.Errorf("Count = %d, want 32", state.Count)
 		}
 
-		nextState, _, _ = state.HandleKey(KeyEvent{Rune: '0'})
-		state = nextState.(NormalState)
-		if state.count != 320 {
-			t.Errorf("count = %d, want 320", state.count)
+		nextState, _, _ = state.HandleKey(tui.KeyEvent{Rune: '0'})
+		state = nextState.(tui.NormalState)
+		if state.Count != 320 {
+			t.Errorf("Count = %d, want 320", state.Count)
 		}
 
-		_, _, _ = state.HandleKey(KeyEvent{Rune: 'i'})
+		_, _, _ = state.HandleKey(tui.KeyEvent{Rune: 'i'})
 	})
 
 	t.Run("NormalState mode changes", func(t *testing.T) {
-		state := NormalState{}
+		state := tui.NormalState{}
 
-		nextState, _, req := state.HandleKey(KeyEvent{Rune: 'i'})
-		if _, isInsert := nextState.(InsertState); !isInsert {
+		nextState, _, req := state.HandleKey(tui.KeyEvent{Rune: 'i'})
+		if _, isInsert := nextState.(tui.InsertState); !isInsert {
 			t.Error("expected InsertState for 'i'")
 		}
 		if req.Query != "" {
 			t.Error("expected empty query on mode change")
 		}
 
-		_, _, req = state.HandleKey(KeyEvent{Rune: 'q'})
+		_, _, req = state.HandleKey(tui.KeyEvent{Rune: 'q'})
 		if req.ModeIndicator != " ? " {
 			t.Errorf("ModeIndicator = %q, want ' ? '", req.ModeIndicator)
 		}
 
-		_, _, req = state.HandleKey(KeyEvent{Key: tcell.KeyEsc})
+		_, _, req = state.HandleKey(tui.KeyEvent{Key: tcell.KeyEsc})
 		if req.ModeIndicator != " ? " {
 			t.Errorf("ModeIndicator = %q, want ' ? ' for ESC", req.ModeIndicator)
 		}
 
-		_, action, _ := state.HandleKey(KeyEvent{Key: tcell.KeyEnter})
-		if action != ActionSelect {
+		_, action, _ := state.HandleKey(tui.KeyEvent{Key: tcell.KeyEnter})
+		if action != tui.ActionSelect {
 			t.Error("expected ActionSelect for Enter")
 		}
 
-		_, action, _ = state.HandleKey(KeyEvent{Key: tcell.KeyCtrlC})
-		if action != ActionQuit {
+		_, action, _ = state.HandleKey(tui.KeyEvent{Key: tcell.KeyCtrlC})
+		if action != tui.ActionQuit {
 			t.Error("expected ActionQuit for Ctrl+C")
 		}
 	})
 
 	t.Run("InsertState typing", func(t *testing.T) {
-		state := InsertState{query: "feat"}
+		state := tui.InsertState{Query: "feat"}
 
-		_, _, req := state.HandleKey(KeyEvent{Rune: 'h'})
+		_, _, req := state.HandleKey(tui.KeyEvent{Rune: 'h'})
 		if req.Query != "feath" {
 			t.Errorf("query = %q, want %q", req.Query, "feath")
 		}
 	})
 
 	t.Run("InsertState backspace", func(t *testing.T) {
-		state := InsertState{query: "test"}
+		state := tui.InsertState{Query: "test"}
 
-		_, _, req := state.HandleKey(KeyEvent{Key: tcell.KeyBackspace})
+		_, _, req := state.HandleKey(tui.KeyEvent{Key: tcell.KeyBackspace})
 		if req.Query != "tes" {
 			t.Errorf("query = %q, want %q", req.Query, "tes")
 		}
 	})
 
 	t.Run("InsertState backspace2", func(t *testing.T) {
-		state := InsertState{query: "tes"}
+		state := tui.InsertState{Query: "tes"}
 
-		_, _, req := state.HandleKey(KeyEvent{Key: tcell.KeyBackspace2})
+		_, _, req := state.HandleKey(tui.KeyEvent{Key: tcell.KeyBackspace2})
 		if req.Query != "te" {
 			t.Errorf("query = %q, want %q", req.Query, "te")
 		}
 	})
 
 	t.Run("InsertState escape with query clears query", func(t *testing.T) {
-		state := InsertState{query: "some query"}
+		state := tui.InsertState{Query: "some query"}
 
-		nextState, _, req := state.HandleKey(KeyEvent{Key: tcell.KeyEsc})
+		nextState, _, req := state.HandleKey(tui.KeyEvent{Key: tcell.KeyEsc})
 		if req.Query != "" {
 			t.Errorf("query = %q, want empty after ESC", req.Query)
 		}
 
-		_, isInsert := nextState.(InsertState)
+		_, isInsert := nextState.(tui.InsertState)
 		if !isInsert {
 			t.Error("expected InsertState after ESC (stays in insert to clear query)")
 		}
-		if nextState.(InsertState).query != "" {
+		if nextState.(tui.InsertState).Query != "" {
 			t.Error("expected query cleared in state")
 		}
 	})
 
 	t.Run("InsertState escape with empty query", func(t *testing.T) {
-		state := InsertState{query: ""}
+		state := tui.InsertState{Query: ""}
 
-		_, _, req := state.HandleKey(KeyEvent{Key: tcell.KeyEsc})
+		_, _, req := state.HandleKey(tui.KeyEvent{Key: tcell.KeyEsc})
 		if req.ModeIndicator != " N " {
 			t.Errorf("ModeIndicator = %q, want ' N '", req.ModeIndicator)
 		}
 	})
 
 	t.Run("InsertState enter selects", func(t *testing.T) {
-		state := InsertState{query: "test"}
+		state := tui.InsertState{Query: "test"}
 
-		_, action, req := state.HandleKey(KeyEvent{Key: tcell.KeyEnter})
-		if action != ActionSelect {
+		_, action, req := state.HandleKey(tui.KeyEvent{Key: tcell.KeyEnter})
+		if action != tui.ActionSelect {
 			t.Error("expected ActionSelect for Enter")
 		}
 		if req.Query != "test" {
@@ -535,19 +501,19 @@ func TestStateTransitions(t *testing.T) {
 	})
 
 	t.Run("ConfirmQuitState yes", func(t *testing.T) {
-		state := ConfirmQuitState{}
+		state := tui.ConfirmQuitState{}
 
-		_, action, _ := state.HandleKey(KeyEvent{Rune: 'y'})
-		if action != ActionQuit {
+		_, action, _ := state.HandleKey(tui.KeyEvent{Rune: 'y'})
+		if action != tui.ActionQuit {
 			t.Error("expected ActionQuit for 'y'")
 		}
 	})
 
 	t.Run("ConfirmQuitState no returns Normal", func(t *testing.T) {
-		state := ConfirmQuitState{}
+		state := tui.ConfirmQuitState{}
 
-		_, action, req := state.HandleKey(KeyEvent{Rune: 'n'})
-		if action != ActionDraw {
+		_, action, req := state.HandleKey(tui.KeyEvent{Rune: 'n'})
+		if action != tui.ActionDraw {
 			t.Error("expected ActionDraw for 'n'")
 		}
 		if req.ModeIndicator != " N " {
@@ -556,18 +522,18 @@ func TestStateTransitions(t *testing.T) {
 	})
 
 	t.Run("ConfirmQuitState enter quits", func(t *testing.T) {
-		state := ConfirmQuitState{}
+		state := tui.ConfirmQuitState{}
 
-		_, action, _ := state.HandleKey(KeyEvent{Key: tcell.KeyEnter})
-		if action != ActionQuit {
+		_, action, _ := state.HandleKey(tui.KeyEvent{Key: tcell.KeyEnter})
+		if action != tui.ActionQuit {
 			t.Error("expected ActionQuit for Enter in confirm")
 		}
 	})
 
 	t.Run("ConfirmQuitState escape returns Normal", func(t *testing.T) {
-		state := ConfirmQuitState{}
+		state := tui.ConfirmQuitState{}
 
-		_, _, req := state.HandleKey(KeyEvent{Key: tcell.KeyEsc})
+		_, _, req := state.HandleKey(tui.KeyEvent{Key: tcell.KeyEsc})
 		if req.ModeIndicator != " N " {
 			t.Errorf("ModeIndicator = %q, want ' N '", req.ModeIndicator)
 		}
