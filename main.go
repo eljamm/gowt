@@ -30,12 +30,22 @@ func main() {
 	})
 
 	removeCmd := &cobra.Command{
-		Use:   "remove",
-		Short: "Interactively remove a worktree",
+		Use:   "remove [worktree-name...]",
+		Short: "Remove one or more worktrees",
+		Args:  cobra.ArbitraryArgs,
 		Run:   func(cmd *cobra.Command, args []string) { app.RunRemove(cmd, args, defaultCommander) },
 	}
 	removeCmd.Flags().BoolP("force", "f", false, "Force removal")
 	rootCmd.AddCommand(removeCmd)
+
+	purgeCmd := &cobra.Command{
+		Use:   "purge [worktree-name...]",
+		Short: "Remove worktrees and delete their branches",
+		Args:  cobra.ArbitraryArgs,
+		Run:   func(cmd *cobra.Command, args []string) { app.RunPurge(cmd, args, defaultCommander) },
+	}
+	purgeCmd.Flags().BoolP("force", "f", false, "Force removal and branch deletion")
+	rootCmd.AddCommand(purgeCmd)
 
 	configCmd := &cobra.Command{
 		Use:   "config",

@@ -288,24 +288,161 @@ func RunRemove(cmd *cobra.Command, args []string, commander git.Commander) {
 		Fail(err)
 	}
 
-	idx, err := SelectWorktreeTUI(worktrees, commander, TUIColors)
+	var toRemove []tui.WorktreeInfo
+
+	if len(args) > 0 {
+		nameSet := make(map[string]bool)
+		for _, arg := range args {
+			nameSet[arg] = true
+		}
+		for _, wt := range worktrees {
+			if nameSet[filepath.Base(wt.AbsPath)] {
+				toRemove = append(toRemove, wt)
+			}
+		}
+	} else {
+		idx, err := SelectWorktreeTUI(worktrees, commander, TUIColors)
+		if err != nil {
+			Fail(err)
+		}
+		if idx < 0 {
+			return
+		}
+		toRemove = append(toRemove, worktrees[idx])
+	}
+
+	if len(toRemove) == 0 {
+		Fail(fmt.Errorf("no matching worktrees found"))
+	}
+
+	fmt.Fprintln(os.Stderr, "About to remove:")
+	for _, wt := range toRemove {
+		fmt.Fprintf(os.Stderr, "  - %s\n", wt.Display)
+	}
+	fmt.Fprintf(os.Stderr, "Remove %d worktree(s)? [y/N] ", len(toRemove))
+
+	reader := bufio.NewReader(os.Stdin)
+	res, err := reader.ReadString('\n')
 	if err != nil {
-		Fail(err)
+		Fail(fmt.Errorf("failed to read input: %w", err))
 	}
-	if idx < 0 {
-		return
+	if !strings.EqualFold(strings.TrimSpace(res), "y") {
+		Fail(fmt.Errorf("aborted"))
 	}
 
-	path := worktrees[idx].AbsPath
 	force, _ := cmd.Flags().GetBool("force")
-	if err := commander.WorktreeRemove(path, force); err != nil {
-		Fail(err)
-	}
-
 	gitRoot, err := commander.RevParse(true)
 	if err != nil {
 		Fail(fmt.Errorf("failed to get git root: %w", err))
 	}
+
+	var failed []string
+	for _, wt := range toRemove {
+		if err := commander.WorktreeRemove(wt.AbsPath, force); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to remove %s: %v\n", wt.Display, err)
+			failed = append(failed, wt.Display)
+			continue
+		}
+		fmt.Fprintf(os.Stderr, "Removed: %s\n", wt.Display)
+	}
+
+	if len(failed) > 0 {
+		fmt.Fprintf(os.Stderr, "Failed to remove: %s\n", strings.Join(failed, ", "))
+	}
+
+	PrintPath(gitRoot)
+}
+
+func RunPurge(cmd *cobra.Command, args []string, commander git.Commander) {
+	worktrees, err := GetWorktreesSorted(commander)
+	if err != nil {
+		Fail(err)
+	}
+
+	var toRemove []tui.WorktreeInfo
+
+	if len(args) > 0 {
+		nameSet := make(map[string]bool)
+		for _, arg := range args {
+			nameSet[arg] = true
+		}
+		for _, wt := range worktrees {
+			if nameSet[filepath.Base(wt.AbsPath)] {
+				toRemove = append(toRemove, wt)
+			}
+		}
+	} else {
+		idx, err := SelectWorktreeTUI(worktrees, commander, TUIColors)
+		if err != nil {
+			Fail(err)
+		}
+		if idx < 0 {
+			return
+		}
+		toRemove = append(toRemove, worktrees[idx])
+	}
+
+	if len(toRemove) == 0 {
+		Fail(fmt.Errorf("no matching worktrees found"))
+	}
+
+	branches := make(map[string]bool)
+	for _, wt := range toRemove {
+		if wt.Branch != "" {
+			branches[wt.Branch] = true
+		}
+	}
+
+	fmt.Fprintln(os.Stderr, "About to remove:")
+	for _, wt := range toRemove {
+		fmt.Fprintf(os.Stderr, "  - %s\n", wt.Display)
+	}
+	if len(branches) > 0 {
+		fmt.Fprintln(os.Stderr, "About to delete branches:")
+		for branch := range branches {
+			fmt.Fprintf(os.Stderr, "  - %s\n", branch)
+		}
+	}
+	fmt.Fprintf(os.Stderr, "Remove %d worktree(s) and delete %d branch(es)? [y/N] ", len(toRemove), len(branches))
+
+	reader := bufio.NewReader(os.Stdin)
+	res, err := reader.ReadString('\n')
+	if err != nil {
+		Fail(fmt.Errorf("failed to read input: %w", err))
+	}
+	if !strings.EqualFold(strings.TrimSpace(res), "y") {
+		Fail(fmt.Errorf("aborted"))
+	}
+
+	force, _ := cmd.Flags().GetBool("force")
+	gitRoot, err := commander.RevParse(true)
+	if err != nil {
+		Fail(fmt.Errorf("failed to get git root: %w", err))
+	}
+
+	var failed []string
+	for _, wt := range toRemove {
+		if err := commander.WorktreeRemove(wt.AbsPath, force); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to remove %s: %v\n", wt.Display, err)
+			failed = append(failed, wt.Display)
+			continue
+		}
+		fmt.Fprintf(os.Stderr, "Removed: %s\n", wt.Display)
+
+		if wt.Branch != "" {
+			if err := commander.BranchDelete(wt.Branch, force); err != nil {
+				fmt.Fprintf(os.Stderr, "Failed to delete branch %s: %v\n", wt.Branch, err)
+				failed = append(failed, wt.Branch)
+				continue
+			}
+			fmt.Fprintf(os.Stderr, "Deleted branch: %s\n", wt.Branch)
+		}
+	}
+
+	if len(failed) > 0 {
+		fmt.Fprintf(os.Stderr, "Failed: %s\n", strings.Join(failed, ", "))
+	}
+
 	PrintPath(gitRoot)
 }
 

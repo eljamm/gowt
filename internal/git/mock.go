@@ -10,6 +10,7 @@ type MockCommander struct {
 	WorktreeRemoveErr  error
 	WorktreeAddErr     error
 	WorktreeAddNewErr  error
+	BranchDeleteErr    error
 }
 
 func (m *MockCommander) WorktreeList() (string, error) {
@@ -34,4 +35,8 @@ func (m *MockCommander) WorktreeAdd(path, branch string) error {
 
 func (m *MockCommander) WorktreeAddNew(path, branch string) error {
 	return m.WorktreeAddNewErr
+}
+
+func (m *MockCommander) BranchDelete(branch string, force bool) error {
+	return m.BranchDeleteErr
 }

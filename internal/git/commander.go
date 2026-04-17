@@ -15,6 +15,7 @@ type Commander interface {
 	WorktreeRemove(path string, force bool) error
 	WorktreeAdd(path, branch string) error
 	WorktreeAddNew(path, branch string) error
+	BranchDelete(branch string, force bool) error
 }
 
 type RealCommander struct{}
@@ -73,4 +74,16 @@ func (r *RealCommander) WorktreeAddNew(path, branch string) error {
 	cmd := exec.CommandContext(ctx, "git", "worktree", "add", "-b", branch, path)
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+func (r *RealCommander) BranchDelete(branch string, force bool) error {
+	args := []string{"branch"}
+	if force {
+		args = append(args, "-D", branch)
+	} else {
+		args = append(args, "-d", branch)
+	}
+	c := exec.Command("git", args...)
+	c.Stderr = os.Stderr
+	return c.Run()
 }
