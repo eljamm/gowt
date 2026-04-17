@@ -139,6 +139,32 @@ var SelectWorktreeTUI func(worktrees []tui.WorktreeInfo, commander git.Commander
 
 var TUIColors tui.TUIColors
 
+func RunConfig(cmd *cobra.Command, args []string, commander git.Commander) {
+	gitRoot, err := commander.RevParse(true)
+	if err != nil {
+		Fail(fmt.Errorf("failed to get git root: %w", err))
+	}
+
+	cfg, err := LoadConfig(gitRoot)
+	if err != nil {
+		Fail(fmt.Errorf("failed to load config: %w", err))
+	}
+
+	if len(args) > 0 {
+		cfg.Main = args[0]
+		if err := SaveConfig(gitRoot, cfg); err != nil {
+			Fail(fmt.Errorf("failed to save config: %w", err))
+		}
+		PrintPath(cfg.Main)
+		return
+	}
+
+	if cfg.Main == "" {
+		Fail(fmt.Errorf("main worktree path not configured"))
+	}
+	PrintPath(cfg.Main)
+}
+
 func RunJump(cmd *cobra.Command, args []string, commander git.Commander) {
 	if len(args) > 0 {
 		path, err := FindWorktreePathForBranch(args[0], commander)

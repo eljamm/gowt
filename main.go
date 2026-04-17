@@ -37,6 +37,19 @@ func main() {
 	removeCmd.Flags().BoolP("force", "f", false, "Force removal")
 	rootCmd.AddCommand(removeCmd)
 
+	configCmd := &cobra.Command{
+		Use:   "config",
+		Short: "Manage configuration",
+	}
+	mainCmd := &cobra.Command{
+		Use:   "main [path]",
+		Short: "Get/set main worktree path",
+		Args:  cobra.RangeArgs(0, 1),
+		Run:   func(cmd *cobra.Command, args []string) { app.RunConfig(cmd, args, defaultCommander) },
+	}
+	configCmd.AddCommand(mainCmd)
+	rootCmd.AddCommand(configCmd)
+
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
