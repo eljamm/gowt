@@ -12,15 +12,15 @@ type Config struct {
 	Main string `toml:"main"`
 }
 
-const configFileName = ".git/gowt.toml"
+const configFileName = "gowt.toml"
 
-func configPath(gitRoot string) string {
-	return filepath.Join(gitRoot, configFileName)
+func configPath(gitCommonDir string) string {
+	return filepath.Join(gitCommonDir, configFileName)
 }
 
-func LoadConfig(gitRoot string) (Config, error) {
+func LoadConfig(gitCommonDir string) (Config, error) {
 	cfg := Config{}
-	path := configPath(gitRoot)
+	path := configPath(gitCommonDir)
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -37,8 +37,8 @@ func LoadConfig(gitRoot string) (Config, error) {
 	return cfg, nil
 }
 
-func SaveConfig(gitRoot string, cfg Config) error {
-	path := configPath(gitRoot)
+func SaveConfig(gitCommonDir string, cfg Config) error {
+	path := configPath(gitCommonDir)
 
 	data, err := toml.Marshal(cfg)
 	if err != nil {

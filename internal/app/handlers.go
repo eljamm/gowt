@@ -140,12 +140,12 @@ var SelectWorktreeTUI func(worktrees []tui.WorktreeInfo, commander git.Commander
 var TUIColors tui.TUIColors
 
 func RunHome(cmd *cobra.Command, args []string, commander git.Commander) {
-	gitRoot, err := commander.RevParse(true)
+	gitCommonDir, err := commander.GitCommonDir()
 	if err != nil {
-		Fail(fmt.Errorf("failed to get git root: %w", err))
+		Fail(fmt.Errorf("failed to get git common dir: %w", err))
 	}
 
-	cfg, err := LoadConfig(gitRoot)
+	cfg, err := LoadConfig(gitCommonDir)
 	if err != nil {
 		Fail(fmt.Errorf("failed to load config: %w", err))
 	}
@@ -165,12 +165,12 @@ func RunRoot(cmd *cobra.Command, args []string, commander git.Commander) {
 }
 
 func RunConfig(cmd *cobra.Command, args []string, commander git.Commander) {
-	gitRoot, err := commander.RevParse(true)
+	gitCommonDir, err := commander.GitCommonDir()
 	if err != nil {
-		Fail(fmt.Errorf("failed to get git root: %w", err))
+		Fail(fmt.Errorf("failed to get git common dir: %w", err))
 	}
 
-	cfg, err := LoadConfig(gitRoot)
+	cfg, err := LoadConfig(gitCommonDir)
 	if err != nil {
 		Fail(fmt.Errorf("failed to load config: %w", err))
 	}
@@ -181,7 +181,7 @@ func RunConfig(cmd *cobra.Command, args []string, commander git.Commander) {
 			Fail(fmt.Errorf("failed to resolve absolute path: %w", err))
 		}
 		cfg.Main = absPath
-		if err := SaveConfig(gitRoot, cfg); err != nil {
+		if err := SaveConfig(gitCommonDir, cfg); err != nil {
 			Fail(fmt.Errorf("failed to save config: %w", err))
 		}
 		PrintPath(cfg.Main)
@@ -221,12 +221,12 @@ func RunJump(cmd *cobra.Command, args []string, commander git.Commander) {
 }
 
 func RunAdd(cmd *cobra.Command, args []string, commander git.Commander) {
-	gitRoot, err := commander.RevParse(true)
+	gitCommonDir, err := commander.GitCommonDir()
 	if err != nil {
-		Fail(fmt.Errorf("failed to get git root: %w", err))
+		Fail(fmt.Errorf("failed to get git common dir: %w", err))
 	}
 
-	cfg, err := LoadConfig(gitRoot)
+	cfg, err := LoadConfig(gitCommonDir)
 	if err != nil {
 		Fail(fmt.Errorf("failed to load config: %w", err))
 	}
@@ -246,7 +246,7 @@ func RunAdd(cmd *cobra.Command, args []string, commander git.Commander) {
 			Fail(fmt.Errorf("failed to resolve absolute path: %w", err))
 		}
 		cfg.Main = absPath
-		if err := SaveConfig(gitRoot, cfg); err != nil {
+		if err := SaveConfig(gitCommonDir, cfg); err != nil {
 			Fail(fmt.Errorf("failed to save config: %w", err))
 		}
 		fmt.Fprintf(os.Stderr, "Config saved.\n")

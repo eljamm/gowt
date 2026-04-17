@@ -36,8 +36,7 @@ func TestLoadConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
 			if tt.tomlData != "" {
-				cfgPath := filepath.Join(tmpDir, ".git", "gowt.toml")
-				os.MkdirAll(filepath.Dir(cfgPath), 0755)
+				cfgPath := filepath.Join(tmpDir, "gowt.toml")
 				os.WriteFile(cfgPath, []byte(tt.tomlData), 0644)
 			}
 
@@ -58,7 +57,6 @@ func TestLoadConfig(t *testing.T) {
 
 func TestSaveConfig(t *testing.T) {
 	tmpDir := t.TempDir()
-	os.MkdirAll(filepath.Join(tmpDir, ".git"), 0755)
 
 	cfg := Config{Main: "/home/user/worktrees"}
 
@@ -67,7 +65,7 @@ func TestSaveConfig(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	cfgPath := filepath.Join(tmpDir, ".git", "gowt.toml")
+	cfgPath := filepath.Join(tmpDir, "gowt.toml")
 	data, err := os.ReadFile(cfgPath)
 	if err != nil {
 		t.Fatalf("failed to read config file: %v", err)
@@ -89,10 +87,10 @@ func TestSaveConfig(t *testing.T) {
 }
 
 func TestConfigPath(t *testing.T) {
-	gitRoot := "/home/user/project"
+	gitCommonDir := "/home/user/project/.git"
 	want := "/home/user/project/.git/gowt.toml"
 
-	got := configPath(gitRoot)
+	got := configPath(gitCommonDir)
 
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
