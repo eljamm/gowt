@@ -197,9 +197,37 @@ func RunAdd(cmd *cobra.Command, args []string, commander git.Commander) {
 	if err != nil {
 		Fail(fmt.Errorf("failed to get current directory: %w", err))
 	}
+
+	gitRoot, err := commander.RevParse(true)
+	if err != nil {
+		Fail(fmt.Errorf("failed to get git root: %w", err))
+	}
+
+	cfg, err := LoadConfig(gitRoot)
+	if err != nil {
+		Fail(fmt.Errorf("failed to load config: %w", err))
+	}
+
+	if cfg.Main == "" {
+		fmt.Fprintf(os.Stderr, "Main worktree path not configured. Set now? [/path]: ")
+		res, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		if err != nil {
+			Fail(fmt.Errorf("failed to read input: %w", err))
+		}
+		res = strings.TrimSpace(res)
+		if res == "" {
+			Fail(fmt.Errorf("aborted: no path provided"))
+		}
+		cfg.Main = res
+		if err := SaveConfig(gitRoot, cfg); err != nil {
+			Fail(fmt.Errorf("failed to save config: %w", err))
+		}
+		fmt.Fprintf(os.Stderr, "Config saved.\n")
+	}
+
 	repoName := filepath.Base(cwd)
 	sanitized := strings.ReplaceAll(branch, "/", "_")
-	newPath := filepath.Join("..", repoName+"_"+sanitized)
+	newPath := filepath.Join(cfg.Main, repoName+"_"+sanitized)
 
 	if err := commander.WorktreeAdd(newPath, branch); err != nil {
 		fmt.Fprintf(os.Stderr, "Branch not found. Create '%s'? [y/N] ", branch)
