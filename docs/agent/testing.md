@@ -8,41 +8,43 @@
 
 ## Mocking Git Commands
 
-Use the `GitCommander` interface for testable code:
+Use the `git.Commander` interface from `internal/git` for testable code:
 
 ```go
-type GitCommander interface {
-    worktreeList() (string, error)
-    revParse(showToplevel bool) (string, error)
-    worktreeRemove(path string, force bool) error
-    worktreeAdd(path, branch string) error
-    worktreeAddNew(path, branch string) error
+// internal/git/commander.go
+type Commander interface {
+    WorktreeList() (string, error)
+    RevParse(showToplevel bool) (string, error)
+    GitCommonDir() (string, error)
+    WorktreeRemove(path string, force bool) error
+    WorktreeAdd(path, branch string) error
+    WorktreeAddNew(path, branch string) error
 }
 ```
 
-Create a mock that returns canned responses:
+Use `git.MockCommander` from `internal/git/mock.go` in tests:
 
 ```go
-type mockGitCommander struct {
-    worktreeListOutput string
-    worktreeListErr    error
+// internal/git/mock.go
+type MockCommander struct {
+    WorktreeListOutput string
+    WorktreeListErr    error
     // ...
 }
 
-func (m *mockGitCommander) worktreeList() (string, error) {
-    return m.worktreeListOutput, m.worktreeListErr
+func (m *MockCommander) WorktreeList() (string, error) {
+    return m.WorktreeListOutput, m.WorktreeListErr
 }
 ```
 
 Inject via function parameters:
 
 ```go
-func getWorktreesSorted(commander GitCommander) ([]WorktreeInfo, error) {
-    // use commander.worktreeList(), commander.revParse(), etc.
+// internal/app/handlers.go
+func GetWorktreesSorted(commander git.Commander) ([]tui.WorktreeInfo, error) {
+    // use commander.WorktreeList(), commander.RevParse(), etc.
 }
 ```
-
-Use `setCommander(mock)` in tests to inject mock behavior.
 
 ## Test Structure
 

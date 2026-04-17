@@ -42,22 +42,23 @@ const (
 
 ## GitCommander Interface
 
-All git operations go through `GitCommander` interface for testability.
+All git operations go through `git.Commander` interface in `internal/git` for testability.
 
 ```go
-type GitCommander interface {
-    worktreeList() (string, error)
-    revParse(showToplevel bool) (string, error)
-    gitCommonDir() (string, error)
-    worktreeRemove(path string, force bool) error
-    worktreeAdd(path, branch string) error
-    worktreeAddNew(path, branch string) error
+// internal/git/commander.go
+type Commander interface {
+    WorktreeList() (string, error)
+    RevParse(showToplevel bool) (string, error)
+    GitCommonDir() (string, error)
+    WorktreeRemove(path string, force bool) error
+    WorktreeAdd(path, branch string) error
+    WorktreeAddNew(path, branch string) error
 }
 
-var defaultCommander GitCommander = &realGitCommander{}
+var RealCommander Commander = &realGitCommander{}
 ```
 
-Use `setCommander(mock)` in tests to inject mock behavior.
+Use `git.MockCommander` in tests to inject mock behavior.
 
 ## Default Selection
 

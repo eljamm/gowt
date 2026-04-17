@@ -5,7 +5,7 @@
 - Follow standard Go conventions (go.dev/doc/effective_go)
 - Keep code simple and readable
 - Write tests for new functionality
-- Single-file application (all code in main.go)
+- Modular structure in internal/ packages
 
 ## Formatting
 
@@ -67,7 +67,8 @@ Extract reusable patterns into helper functions to avoid duplication.
 
 ```go
 // Branch extraction from git worktree line
-func extractBranch(line string) string {
+// internal/app/handlers.go
+func ExtractBranch(line string) string {
 	if idx := strings.Index(line, "["); idx != -1 {
 		if end := strings.Index(line[idx:], "]"); end != -1 {
 			return line[idx+1 : idx+end]

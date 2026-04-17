@@ -1,6 +1,6 @@
 # gowt — Agent Instructions
 
-Fuzzy TUI for managing git worktrees. Single-file Go app with tcell, state machine (Insert/Normal/Confirm modes), and shell wrappers for auto-`cd`.
+Fuzzy TUI for managing git worktrees. Modular Go app with tcell, state machine (Insert/Normal/Confirm modes), and shell wrappers for auto-`cd`.
 
 ## Quick Commands
 
@@ -31,16 +31,24 @@ Fuzzy TUI for managing git worktrees. Single-file Go app with tcell, state machi
 1. Use tabs for indentation; run `go fmt` before committing
 2. Group imports: stdlib first, then external (blank line between)
 3. Use `fail(err)` for CLI errors; `fmt.Errorf("message: %w", err)` for wrapped errors
-4. All git operations via `GitCommander` interface for testability
+4. All git operations via `git.Commander` interface in internal/git for testability
 5. Use `go mod tidy` after adding dependencies
 
 ## Project Structure
 
 ```
-main.go           # All application code (~963 lines)
-main_test.go      # Tests (~573 lines)
-go.mod/go.sum     # Dependencies (Go 1.25.5)
-flake.nix         # Nix flake configuration
-nix/              # Nix build infrastructure
-docs/agent/       # Reference documentation
+main.go                   # CLI wiring only (~43 lines)
+main_test.go              # Tests (~541 lines)
+go.mod/go.sum             # Dependencies (Go 1.25.5)
+flake.nix                 # Nix flake configuration
+nix/                      # Nix build infrastructure
+internal/
+  app/handlers.go         # RunJump, RunAdd, RunRemove, GetWorktreesSorted, etc.
+  git/
+    commander.go         # Commander interface + RealCommander
+    mock.go              # MockCommander for tests
+  tui/
+    state.go             # State types (Action, KeyEvent, InsertState, etc.)
+    tui.go               # SelectWorktreeTUI, TUIColors, FuzzyMatchPositions
+docs/agent/              # Reference documentation
 ```
