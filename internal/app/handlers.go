@@ -156,6 +156,14 @@ func RunHome(cmd *cobra.Command, args []string, commander git.Commander) {
 	PrintPath(cfg.Main)
 }
 
+func RunRoot(cmd *cobra.Command, args []string, commander git.Commander) {
+	gitRoot, err := commander.RevParse(true)
+	if err != nil {
+		Fail(fmt.Errorf("failed to get git root: %w", err))
+	}
+	PrintPath(gitRoot)
+}
+
 func RunConfig(cmd *cobra.Command, args []string, commander git.Commander) {
 	gitRoot, err := commander.RevParse(true)
 	if err != nil {
