@@ -1,0 +1,222 @@
+package app
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/spf13/cobra"
+
+	"gwt/internal/git"
+	"gwt/internal/tui"
+)
+
+func GetWorktreesSorted(commander git.Commander) ([]tui.WorktreeInfo, error) {
+	out, err := commander.WorktreeList()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list worktrees: %w", err)
+	}
+
+	trimmed := strings.TrimSpace(out)
+	if trimmed == "" {
+		return nil, fmt.Errorf("no worktrees found")
+	}
+
+	lines := strings.Split(trimmed, "\n")
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current directory: %w", err)
+	}
+	cwd, err = filepath.EvalSymlinks(cwd)
+	if err != nil {
+		return nil, fmt.Errorf("failed to resolve symlinks: %w", err)
+	}
+
+	gitRoot, err := commander.RevParse(true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get git root: %w", err)
+	}
+
+	type lineInfo struct {
+		absPath string
+		name    string
+		commit  string
+		branch  string
+		isCwd   bool
+	}
+	lineInfos := make([]lineInfo, 0, len(lines))
+
+	for _, line := range lines {
+		fields := strings.Fields(line)
+		if len(fields) > 0 {
+			absPath := fields[0]
+			relPath, err := filepath.Rel(gitRoot, absPath)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get relative path for %s: %w", absPath, err)
+			}
+			name := filepath.Base(absPath)
+			isCwd := relPath == "." || relPath == "./"
+			commit := ""
+			if len(fields) > 1 {
+				commit = fields[1]
+			}
+			branch := ExtractBranch(line)
+			lineInfos = append(
+				lineInfos,
+				lineInfo{
+					absPath: absPath,
+					name:    name,
+					commit:  commit,
+					branch:  branch,
+					isCwd:   isCwd,
+				},
+			)
+		}
+	}
+
+	result := make([]tui.WorktreeInfo, 0, len(lineInfos))
+	for _, info := range lineInfos {
+		var display string
+		if info.branch != "" {
+			display = fmt.Sprintf("%-20s %s [%s]", info.name, info.commit, info.branch)
+		} else {
+			display = fmt.Sprintf("%-20s %s", info.name, info.commit)
+		}
+		result = append(result, tui.WorktreeInfo{
+			AbsPath: info.absPath,
+			Display: display,
+			Commit:  info.commit,
+			Branch:  info.branch,
+			IsCwd:   info.isCwd,
+		})
+	}
+
+	sort.SliceStable(result, func(i, j int) bool {
+		if result[i].IsCwd {
+			return true
+		}
+		if result[j].IsCwd {
+			return false
+		}
+		return result[i].Display < result[j].Display
+	})
+
+	return result, nil
+}
+
+func FindWorktreePathForBranch(branch string, commander git.Commander) (string, error) {
+	wts, err := GetWorktreesSorted(commander)
+	if err != nil {
+		return "", fmt.Errorf("failed to get worktrees: %w", err)
+	}
+	for _, wt := range wts {
+		if wt.Branch == branch {
+			return wt.AbsPath, nil
+		}
+	}
+	return "", fmt.Errorf("branch not found")
+}
+
+func ExtractBranch(line string) string {
+	if idx := strings.Index(line, "["); idx != -1 {
+		if end := strings.Index(line[idx:], "]"); end != -1 {
+			return line[idx+1 : idx+end]
+		}
+	}
+	if idx := strings.Index(line, "("); idx != -1 {
+		if end := strings.Index(line[idx:], ")"); end != -1 {
+			return line[idx+1 : idx+end]
+		}
+	}
+	return ""
+}
+
+var SelectWorktreeTUI func(worktrees []tui.WorktreeInfo, commander git.Commander) (int, error)
+
+func RunJump(cmd *cobra.Command, args []string, commander git.Commander) {
+	if len(args) > 0 {
+		path, err := FindWorktreePathForBranch(args[0], commander)
+		if err != nil {
+			Fail(err)
+		}
+		PrintPath(path)
+		return
+	}
+
+	worktrees, err := GetWorktreesSorted(commander)
+	if err != nil {
+		Fail(err)
+	}
+
+	idx, err := SelectWorktreeTUI(worktrees, commander)
+	if err != nil {
+		Fail(err)
+	}
+	if idx < 0 {
+		return
+	}
+
+	PrintPath(worktrees[idx].AbsPath)
+}
+
+func RunAdd(cmd *cobra.Command, args []string, commander git.Commander) {
+	branch := args[0]
+	cwd, err := os.Getwd()
+	if err != nil {
+		Fail(fmt.Errorf("failed to get current directory: %w", err))
+	}
+	repoName := filepath.Base(cwd)
+	sanitized := strings.ReplaceAll(branch, "/", "_")
+	newPath := filepath.Join("..", repoName+"_"+sanitized)
+
+	if err := commander.WorktreeAdd(newPath, branch); err != nil {
+		fmt.Fprintf(os.Stderr, "Branch not found. Create '%s'? [y/N] ", branch)
+		res, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		if err != nil {
+			Fail(fmt.Errorf("failed to read input: %w", err))
+		}
+		if strings.EqualFold(strings.TrimSpace(res), "y") {
+			if err := commander.WorktreeAddNew(newPath, branch); err != nil {
+				Fail(fmt.Errorf("failed to create worktree: %w", err))
+			}
+		} else {
+			os.Exit(1)
+		}
+	}
+	PrintPath(newPath)
+}
+
+func RunRemove(cmd *cobra.Command, args []string, commander git.Commander) {
+	worktrees, err := GetWorktreesSorted(commander)
+	if err != nil {
+		Fail(err)
+	}
+
+	idx, err := SelectWorktreeTUI(worktrees, commander)
+	if err != nil {
+		Fail(err)
+	}
+	if idx < 0 {
+		return
+	}
+
+	path := worktrees[idx].AbsPath
+	force, _ := cmd.Flags().GetBool("force")
+	if err := commander.WorktreeRemove(path, force); err != nil {
+		Fail(err)
+	}
+
+	gitRoot, err := commander.RevParse(true)
+	if err != nil {
+		Fail(fmt.Errorf("failed to get git root: %w", err))
+	}
+	PrintPath(gitRoot)
+}
+
+func PrintPath(p string) { fmt.Println(p) }
+
+func Fail(err error) { fmt.Fprintln(os.Stderr, err); os.Exit(1) }
