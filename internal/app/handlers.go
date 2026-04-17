@@ -193,10 +193,6 @@ func RunJump(cmd *cobra.Command, args []string, commander git.Commander) {
 
 func RunAdd(cmd *cobra.Command, args []string, commander git.Commander) {
 	branch := args[0]
-	cwd, err := os.Getwd()
-	if err != nil {
-		Fail(fmt.Errorf("failed to get current directory: %w", err))
-	}
 
 	gitRoot, err := commander.RevParse(true)
 	if err != nil {
@@ -225,9 +221,7 @@ func RunAdd(cmd *cobra.Command, args []string, commander git.Commander) {
 		fmt.Fprintf(os.Stderr, "Config saved.\n")
 	}
 
-	repoName := filepath.Base(cwd)
-	sanitized := strings.ReplaceAll(branch, "/", "_")
-	newPath := filepath.Join(cfg.Main, repoName+"_"+sanitized)
+	newPath := filepath.Join(cfg.Main, branch)
 
 	if err := commander.WorktreeAdd(newPath, branch); err != nil {
 		fmt.Fprintf(os.Stderr, "Branch not found. Create '%s'? [y/N] ", branch)
