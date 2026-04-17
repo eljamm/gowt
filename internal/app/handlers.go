@@ -240,9 +240,6 @@ func RunAdd(cmd *cobra.Command, args []string, commander git.Commander) {
 			Fail(fmt.Errorf("failed to read input: %w", err))
 		}
 		branch = strings.TrimSpace(branch)
-		if branch == "" {
-			Fail(fmt.Errorf("aborted: no branch name"))
-		}
 	} else if len(args) == 1 {
 		wtName = args[0]
 
@@ -252,15 +249,21 @@ func RunAdd(cmd *cobra.Command, args []string, commander git.Commander) {
 			Fail(fmt.Errorf("failed to read input: %w", err))
 		}
 		branch = strings.TrimSpace(branch)
-		if branch == "" {
-			Fail(fmt.Errorf("aborted: no branch name"))
-		}
 	} else {
 		wtName = args[0]
 		branch = args[1]
 	}
 
 	newPath := filepath.Join(cfg.Main, wtName)
+
+	if branch == "" {
+		fmt.Fprintln(os.Stderr, "No branch specified, creating worktree at HEAD")
+		if err := commander.WorktreeAdd(newPath, "HEAD"); err != nil {
+			Fail(fmt.Errorf("failed to create worktree: %w", err))
+		}
+		PrintPath(newPath)
+		return
+	}
 
 	if err := commander.WorktreeAdd(newPath, branch); err != nil {
 		fmt.Fprintf(os.Stderr, "Branch not found. Create '%s'? [y/N] ", branch)
