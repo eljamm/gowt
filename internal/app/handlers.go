@@ -157,11 +157,15 @@ func RunHome(cmd *cobra.Command, args []string, commander git.Commander) {
 }
 
 func RunRoot(cmd *cobra.Command, args []string, commander git.Commander) {
-	gitRoot, err := commander.RevParse(true)
+	gitCommonDir, err := commander.GitCommonDir()
 	if err != nil {
-		Fail(fmt.Errorf("failed to get git root: %w", err))
+		Fail(fmt.Errorf("failed to get git common dir: %w", err))
 	}
-	PrintPath(gitRoot)
+	root := strings.TrimSuffix(gitCommonDir, "/.git")
+	if root == gitCommonDir {
+		Fail(fmt.Errorf("failed to determine git root from common dir"))
+	}
+	PrintPath(root)
 }
 
 func RunConfig(cmd *cobra.Command, args []string, commander git.Commander) {
