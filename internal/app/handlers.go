@@ -192,8 +192,6 @@ func RunJump(cmd *cobra.Command, args []string, commander git.Commander) {
 }
 
 func RunAdd(cmd *cobra.Command, args []string, commander git.Commander) {
-	branch := args[0]
-
 	gitRoot, err := commander.RevParse(true)
 	if err != nil {
 		Fail(fmt.Errorf("failed to get git root: %w", err))
@@ -221,11 +219,52 @@ func RunAdd(cmd *cobra.Command, args []string, commander git.Commander) {
 		fmt.Fprintf(os.Stderr, "Config saved.\n")
 	}
 
-	newPath := filepath.Join(cfg.Main, branch)
+	reader := bufio.NewReader(os.Stdin)
+
+	var wtName, branch string
+
+	if len(args) == 0 {
+		fmt.Fprintf(os.Stderr, "Worktree name: ")
+		wtName, err = reader.ReadString('\n')
+		if err != nil {
+			Fail(fmt.Errorf("failed to read input: %w", err))
+		}
+		wtName = strings.TrimSpace(wtName)
+		if wtName == "" {
+			Fail(fmt.Errorf("aborted: no worktree name"))
+		}
+
+		fmt.Fprintf(os.Stderr, "Branch name: ")
+		branch, err = reader.ReadString('\n')
+		if err != nil {
+			Fail(fmt.Errorf("failed to read input: %w", err))
+		}
+		branch = strings.TrimSpace(branch)
+		if branch == "" {
+			Fail(fmt.Errorf("aborted: no branch name"))
+		}
+	} else if len(args) == 1 {
+		wtName = args[0]
+
+		fmt.Fprintf(os.Stderr, "Branch name: ")
+		branch, err = reader.ReadString('\n')
+		if err != nil {
+			Fail(fmt.Errorf("failed to read input: %w", err))
+		}
+		branch = strings.TrimSpace(branch)
+		if branch == "" {
+			Fail(fmt.Errorf("aborted: no branch name"))
+		}
+	} else {
+		wtName = args[0]
+		branch = args[1]
+	}
+
+	newPath := filepath.Join(cfg.Main, wtName)
 
 	if err := commander.WorktreeAdd(newPath, branch); err != nil {
 		fmt.Fprintf(os.Stderr, "Branch not found. Create '%s'? [y/N] ", branch)
-		res, err := bufio.NewReader(os.Stdin).ReadString('\n')
+		res, err := reader.ReadString('\n')
 		if err != nil {
 			Fail(fmt.Errorf("failed to read input: %w", err))
 		}

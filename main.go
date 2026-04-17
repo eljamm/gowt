@@ -23,9 +23,9 @@ func main() {
 	}
 
 	rootCmd.AddCommand(&cobra.Command{
-		Use:   "add [branch]",
-		Short: "Create a worktree from a branch",
-		Args:  cobra.ExactArgs(1),
+		Use:   "add [wt-name] [branch]",
+		Short: "Create a worktree",
+		Args:  cobra.RangeArgs(0, 2),
 		Run:   func(cmd *cobra.Command, args []string) { app.RunAdd(cmd, args, defaultCommander) },
 	})
 
