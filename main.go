@@ -16,13 +16,13 @@ func main() {
 	app.TUIColors = tui.DefaultTUIColors()
 	app.SelectWorktreeTUI = tui.SelectWorktreeTUI
 
-	rootCmd := &cobra.Command{
+	appCmd := &cobra.Command{
 		Use:   "gwt",
 		Short: "Git Worktree Manager",
 		Run:   func(cmd *cobra.Command, args []string) { app.RunJump(cmd, args, defaultCommander) },
 	}
 
-	rootCmd.AddCommand(&cobra.Command{
+	appCmd.AddCommand(&cobra.Command{
 		Use:   "add [wt-name] [branch]",
 		Short: "Create a worktree",
 		Args:  cobra.RangeArgs(0, 2),
@@ -36,14 +36,21 @@ func main() {
 		Run:   func(cmd *cobra.Command, args []string) { app.RunRemove(cmd, args, defaultCommander) },
 	}
 	removeCmd.Flags().BoolP("force", "f", false, "Force removal")
-	rootCmd.AddCommand(removeCmd)
+	appCmd.AddCommand(removeCmd)
+
+	rootCmd := &cobra.Command{
+		Use:   "root",
+		Short: "Jump to git root (toplevel worktree)",
+		Run:   func(cmd *cobra.Command, args []string) { app.RunRoot(cmd, args, defaultCommander) },
+	}
+	appCmd.AddCommand(rootCmd)
 
 	homeCmd := &cobra.Command{
 		Use:   "home",
 		Short: "Jump to main worktree",
 		Run:   func(cmd *cobra.Command, args []string) { app.RunHome(cmd, args, defaultCommander) },
 	}
-	rootCmd.AddCommand(homeCmd)
+	appCmd.AddCommand(homeCmd)
 
 	purgeCmd := &cobra.Command{
 		Use:   "purge [worktree-name...]",
@@ -52,7 +59,7 @@ func main() {
 		Run:   func(cmd *cobra.Command, args []string) { app.RunPurge(cmd, args, defaultCommander) },
 	}
 	purgeCmd.Flags().BoolP("force", "f", false, "Force removal and branch deletion")
-	rootCmd.AddCommand(purgeCmd)
+	appCmd.AddCommand(purgeCmd)
 
 	configCmd := &cobra.Command{
 		Use:   "config",
@@ -65,9 +72,9 @@ func main() {
 		Run:   func(cmd *cobra.Command, args []string) { app.RunConfig(cmd, args, defaultCommander) },
 	}
 	configCmd.AddCommand(mainCmd)
-	rootCmd.AddCommand(configCmd)
+	appCmd.AddCommand(configCmd)
 
-	if err := rootCmd.Execute(); err != nil {
+	if err := appCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
 }
