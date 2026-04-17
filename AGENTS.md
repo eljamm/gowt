@@ -24,11 +24,11 @@ For Nix installation, shell wrappers, and NixOS/Home Manager: see README.md
 ## Core Rules
 
 1. Use tabs for indentation; run `go fmt` before committing
-2. Group imports: stdlib first, then external (blank line between)
-3. Use `fail(err)` for CLI errors; `fmt.Errorf("message: %w", err)` for wrapped errors
-4. All git operations via `git.Commander` interface in internal/git for testability
-5. Use `go mod tidy` after adding dependencies
-6. **Keep AGENTS.md lean** — migrate bulky content (full code examples, exhaustive lists) to docs/agent/ reference files; AGENTS.md should stay under 8KB
+1. Group imports: stdlib first, then external (blank line between)
+1. Use `fail(err)` for CLI errors; `fmt.Errorf("message: %w", err)` for wrapped errors
+1. All git operations via `git.Commander` interface in internal/git for testability
+1. Use `go mod tidy` after adding dependencies
+1. **Keep AGENTS.md lean** — migrate bulky content (full code examples, exhaustive lists) to docs/agent/ reference files; AGENTS.md should stay under 8KB
 
 ## Project Structure
 
@@ -41,12 +41,14 @@ For Nix installation, shell wrappers, and NixOS/Home Manager: see README.md
 ├── nix/                    # Nix build infrastructure
 ├── internal/
 │   ├── app/
-│   │   └── handlers.go    # RunJump, RunAdd, RunRemove, GetWorktreesSorted, etc.
+│   │   ├── config.go       # Config (main worktree path)
+│   │   ├── config_test.go  # Config tests
+│   │   └── handlers.go     # RunJump, RunAdd, RunRemove, RunConfig
 │   ├── git/
-│   │   ├── commander.go   # Commander interface + RealCommander
-│   │   └── mock.go        # MockCommander for tests
+│   │   ├── commander.go    # Commander interface + RealCommander
+│   │   └── mock.go         # MockCommander for tests
 │   └── tui/
-│       ├── state.go       # State types (Action, KeyEvent, InsertState, etc.)
-│       └── tui.go         # SelectWorktreeTUI, TUIColors, FuzzyMatchPositions
-└── docs/agent/            # Reference documentation
+│       ├── state.go        # State types (Action, KeyEvent, InsertState, etc.)
+│       └── tui.go          # SelectWorktreeTUI, TUIColors
+└── docs/agent/             # Reference documentation
 ```
