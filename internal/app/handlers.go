@@ -176,7 +176,11 @@ func RunConfig(cmd *cobra.Command, args []string, commander git.Commander) {
 	}
 
 	if len(args) > 0 {
-		cfg.Main = args[0]
+		absPath, err := filepath.Abs(args[0])
+		if err != nil {
+			Fail(fmt.Errorf("failed to resolve absolute path: %w", err))
+		}
+		cfg.Main = absPath
 		if err := SaveConfig(gitRoot, cfg); err != nil {
 			Fail(fmt.Errorf("failed to save config: %w", err))
 		}
@@ -237,7 +241,11 @@ func RunAdd(cmd *cobra.Command, args []string, commander git.Commander) {
 		if res == "" {
 			Fail(fmt.Errorf("aborted: no path provided"))
 		}
-		cfg.Main = res
+		absPath, err := filepath.Abs(res)
+		if err != nil {
+			Fail(fmt.Errorf("failed to resolve absolute path: %w", err))
+		}
+		cfg.Main = absPath
 		if err := SaveConfig(gitRoot, cfg); err != nil {
 			Fail(fmt.Errorf("failed to save config: %w", err))
 		}
