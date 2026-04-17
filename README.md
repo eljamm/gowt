@@ -18,6 +18,33 @@ Vibe rewrite of [gko/gwt](https://github.com/gko/gwt/blob/master/gwt.sh).
 - Vim-style navigation (j/k, g/G, Ctrl-d/Ctrl-u)
 - Auto-cd to selected worktree with shell wrapper
 - Auto-selects root worktree when launching from other worktrees
+- Configurable main worktree directory for `gwt add`
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `gwt` | Jump to a worktree (fuzzy select) |
+| `gwt add` | Create a worktree (interactive) |
+| `gwt add name` | Create a worktree, prompt for branch |
+| `gwt add name branch` | Create a worktree directly |
+| `gwt remove` | Remove a worktree (interactive) |
+| `gwt config main` | Show main worktree path |
+| `gwt config main /path` | Set main worktree path |
+
+### Main Worktree
+
+Set a default directory where new worktrees are created:
+
+```shell
+gwt config main ~/worktrees
+```
+
+Then creating worktrees uses that path:
+
+```shell
+gwt add feature-login    # creates ~/worktrees/feature-login
+```
 
 ## Usage
 
