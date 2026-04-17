@@ -28,7 +28,7 @@ buildGoModule (finalAttrs: {
       );
   };
 
-  vendorHash = "sha256-CJLTDn/ib2htab3gpyEYbAFq3iEjvc1nJ+2eqO9pYqE=";
+  vendorHash = "sha256-0nVmMIq+UocNPktI41rxmoisaObhGQloLeNzZdnG4bs=";
 
   nativeBuildInputs = [ installShellFiles ];
 

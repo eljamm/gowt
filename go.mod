@@ -3,6 +3,7 @@ module gwt
 go 1.25.5
 
 require (
+	github.com/BurntSushi/toml v1.6.0
 	github.com/gdamore/tcell/v2 v2.13.8
 	github.com/ktr0731/go-fuzzyfinder v0.9.0
 	github.com/spf13/cobra v1.10.2
