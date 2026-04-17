@@ -38,6 +38,13 @@ func main() {
 	removeCmd.Flags().BoolP("force", "f", false, "Force removal")
 	rootCmd.AddCommand(removeCmd)
 
+	homeCmd := &cobra.Command{
+		Use:   "home",
+		Short: "Jump to main worktree",
+		Run:   func(cmd *cobra.Command, args []string) { app.RunHome(cmd, args, defaultCommander) },
+	}
+	rootCmd.AddCommand(homeCmd)
+
 	purgeCmd := &cobra.Command{
 		Use:   "purge [worktree-name...]",
 		Short: "Remove worktrees and delete their branches",
