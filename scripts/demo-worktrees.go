@@ -70,7 +70,7 @@ func setup() {
 	}
 
 	wtDir := filepath.Join(root, ".wt")
-	if err := os.MkdirAll(wtDir, 0755); err != nil {
+	if err := os.MkdirAll(wtDir, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating .wt directory: %v\n", err)
 		os.Exit(1)
 	}

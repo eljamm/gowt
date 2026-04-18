@@ -41,7 +41,8 @@ func (r *RealCommander) RevParse(showToplevel bool) (string, error) {
 }
 
 func (r *RealCommander) GitCommonDir() (string, error) {
-	out, err := exec.Command("git", "rev-parse", "--path-format=absolute", "--git-common-dir").Output()
+	out, err := exec.Command("git", "rev-parse", "--path-format=absolute", "--git-common-dir").
+		Output()
 	if err != nil {
 		return "", err
 	}

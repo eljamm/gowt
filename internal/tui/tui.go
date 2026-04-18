@@ -73,7 +73,11 @@ func FuzzyMatchPositions(query, target string) [][2]int {
 	return positions
 }
 
-func SelectWorktreeTUI(worktrees []WorktreeInfo, commander git.Commander, colors TUIColors) (int, error) {
+func SelectWorktreeTUI(
+	worktrees []WorktreeInfo,
+	commander git.Commander,
+	colors TUIColors,
+) (int, error) {
 	screen, err := tcell.NewScreen()
 	if err != nil {
 		return -1, err
@@ -312,7 +316,8 @@ func SelectWorktreeTUI(worktrees []WorktreeInfo, commander git.Commander, colors
 		var nextState State
 		nextState, action, req = state.HandleKey(keyEvent)
 
-		if req.NavDelta != 0 || req.NavTop || req.NavBottom || req.NavTarget > 0 || req.NavPage != 0 {
+		if req.NavDelta != 0 || req.NavTop || req.NavBottom || req.NavTarget > 0 ||
+			req.NavPage != 0 {
 			visible := displayWorktrees(currentQuery)
 			if req.NavTop {
 				selected = 0

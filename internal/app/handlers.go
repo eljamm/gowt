@@ -239,7 +239,9 @@ func loadConfigForAdd(commander git.Commander) (Config, error) {
 		return Config{}, err
 	}
 	if cfg.Main == "" {
-		return Config{}, fmt.Errorf("main worktree path not configured. Run 'gwt config main /path' first")
+		return Config{}, fmt.Errorf(
+			"main worktree path not configured. Run 'gwt config main /path' first",
+		)
 	}
 	return cfg, nil
 }
@@ -555,7 +557,12 @@ func RunPurge(cmd *cobra.Command, args []string, commander git.Commander) {
 			fmt.Fprintf(os.Stderr, "  - %s\n", branch)
 		}
 	}
-	fmt.Fprintf(os.Stderr, "Remove %d worktree(s) and delete %d branch(es)? [y/N] ", len(toRemove), len(branches))
+	fmt.Fprintf(
+		os.Stderr,
+		"Remove %d worktree(s) and delete %d branch(es)? [y/N] ",
+		len(toRemove),
+		len(branches),
+	)
 
 	reader := bufio.NewReader(os.Stdin)
 	res, err := reader.ReadString('\n')

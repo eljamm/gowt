@@ -37,7 +37,7 @@ func TestLoadConfig(t *testing.T) {
 			tmpDir := t.TempDir()
 			if tt.tomlData != "" {
 				cfgPath := filepath.Join(tmpDir, "gowt.toml")
-				os.WriteFile(cfgPath, []byte(tt.tomlData), 0644)
+				os.WriteFile(cfgPath, []byte(tt.tomlData), 0o644)
 			}
 
 			cfg, err := LoadConfig(tmpDir)
