@@ -63,26 +63,17 @@ buildGoModule (finalAttrs: {
         # fish
         ''
           function gwt
-              # Run the binary and capture output
-              set -l output (${finalAttrs.finalPackage}/bin/gwt $argv)
-              set -l exit_code $status
+              set -l target (${finalAttrs.finalPackage}/bin/gwt $argv)
+              or return
 
-              if test $exit_code -eq 0
-                  # CRITICAL: Only cd if it is actually a directory
-                  if test -d "$output"
-                      builtin cd "$output"
-                  else
-                      # Otherwise just print the text (Help, Version, etc)
-                      printf "%s\n" "$output"
-                  end
-              else
-                  # Print errors
-                  printf "%s\n" "$output"
-                  return $exit_code
+              if test -d "$target"
+                  builtin cd "$target"
+                  return
               end
+
+              string join \n $target
           end
 
-          # Source the patched completions
           source ${finalAttrs.finalPackage}/share/fish/vendor_completions.d/gwt.fish
         '';
 
@@ -92,26 +83,22 @@ buildGoModule (finalAttrs: {
         # bash
         ''
           gwt() {
-            local output
-            output=$(${finalAttrs.finalPackage}/bin/gwt "$@")
-            local exit_code=$?
+              local target
 
-            if [ $exit_code -eq 0 ]; then
-              if [ -d "$output" ]; then
-                builtin cd "$output"
-              else
-                printf "%s\n" "$output"
+              target=$(${finalAttrs.finalPackage}/bin/gwt "$@") || return
+
+              if [ -d "$target" ]; then
+                  builtin cd "$target"
+                  return
               fi
-            else
-              printf "%s\n" "$output"
-              return $exit_code
-            fi
+
+              printf "%s\n" "$target"
           }
 
           if [ -n "$ZSH_VERSION" ]; then
-             source ${finalAttrs.finalPackage}/share/zsh/site-functions/_gwt
+              source ${finalAttrs.finalPackage}/share/zsh/site-functions/_gwt
           elif [ -n "$BASH_VERSION" ]; then
-             source ${finalAttrs.finalPackage}/share/bash-completion/completions/gwt.bash
+              source ${finalAttrs.finalPackage}/share/bash-completion/completions/gwt.bash
           fi
         '';
   };
