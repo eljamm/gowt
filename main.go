@@ -22,6 +22,14 @@ func main() {
 		Run:   func(cmd *cobra.Command, args []string) { app.RunJump(cmd, args, defaultCommander) },
 	}
 
+	jumpCmd := &cobra.Command{
+		Use:   "jump [name]",
+		Short: "Jump to worktree by name",
+		Args:  cobra.RangeArgs(0, 1),
+		Run:   func(cmd *cobra.Command, args []string) { app.RunJump(cmd, args, defaultCommander) },
+	}
+	appCmd.AddCommand(jumpCmd)
+
 	appCmd.AddCommand(&cobra.Command{
 		Use:   "add [wt-name] [branch]",
 		Short: "Create a worktree",

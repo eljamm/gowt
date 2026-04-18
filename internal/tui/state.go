@@ -33,6 +33,7 @@ type RenderRequest struct {
 }
 
 type WorktreeInfo struct {
+	Name    string
 	AbsPath string
 	Display string
 	Commit  string

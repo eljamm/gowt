@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ktr0731/go-fuzzyfinder/matching"
 	"github.com/spf13/cobra"
 
 	"gwt/internal/git"
@@ -87,6 +88,7 @@ func GetWorktreesSorted(commander git.Commander) ([]tui.WorktreeInfo, error) {
 			display = fmt.Sprintf("%-20s %s", info.name, info.commit)
 		}
 		result = append(result, tui.WorktreeInfo{
+			Name:    info.name,
 			AbsPath: info.absPath,
 			Display: display,
 			Commit:  info.commit,
@@ -198,14 +200,127 @@ func RunConfig(cmd *cobra.Command, args []string, commander git.Commander) {
 	PrintPath(cfg.Main)
 }
 
-func RunJump(cmd *cobra.Command, args []string, commander git.Commander) {
-	if len(args) > 0 {
-		path, err := FindWorktreePathForBranch(args[0], commander)
-		if err != nil {
-			Fail(err)
+func FindWorktreePath(name string, commander git.Commander) (string, error) {
+	wts, err := GetWorktreesSorted(commander)
+	if err != nil {
+		return "", err
+	}
+	for _, wt := range wts {
+		if wt.Name == name || wt.Branch == name {
+			return wt.AbsPath, nil
 		}
-		PrintPath(path)
-		return
+	}
+	return "", fmt.Errorf("worktree '%s' not found", name)
+}
+
+func FindSimilarWorktrees(name string, worktrees []tui.WorktreeInfo) []tui.WorktreeInfo {
+	displayStrs := make([]string, len(worktrees))
+	for i, wt := range worktrees {
+		displayStrs[i] = wt.Display
+	}
+	matched := matching.FindAll(name, displayStrs, matching.WithMode(matching.ModeSmart))
+	if len(matched) == 0 {
+		return nil
+	}
+	result := make([]tui.WorktreeInfo, 0, len(matched))
+	for _, m := range matched {
+		result = append(result, worktrees[m.Idx])
+	}
+	return result
+}
+
+func loadConfigForAdd(commander git.Commander) (Config, error) {
+	gitCommonDir, err := commander.GitCommonDir()
+	if err != nil {
+		return Config{}, err
+	}
+	cfg, err := LoadConfig(gitCommonDir)
+	if err != nil {
+		return Config{}, err
+	}
+	if cfg.Main == "" {
+		return Config{}, fmt.Errorf("main worktree path not configured. Run 'gwt config main /path' first")
+	}
+	return cfg, nil
+}
+
+func RunJump(cmd *cobra.Command, args []string, commander git.Commander) {
+	wtName := ""
+	if len(args) > 0 {
+		wtName = args[0]
+	}
+
+	if wtName != "" {
+		path, err := FindWorktreePath(wtName, commander)
+		if err == nil {
+			PrintPath(path)
+			return
+		}
+		fmt.Fprintln(os.Stderr, err)
+		reader := bufio.NewReader(os.Stdin)
+		worktrees, listErr := GetWorktreesSorted(commander)
+		if listErr != nil {
+			Fail(listErr)
+		}
+		similar := FindSimilarWorktrees(wtName, worktrees)
+		if len(similar) > 0 {
+			fmt.Fprintln(os.Stderr, "Did you mean:")
+			for i, s := range similar {
+				fmt.Fprintf(os.Stderr, "  [%d] %s\n", i+1, s.Display)
+			}
+			fmt.Fprintf(os.Stderr, "  [n] Create new worktree '%s'\n", wtName)
+			fmt.Fprintf(os.Stderr, "  [q] Quit\n")
+			fmt.Fprint(os.Stderr, "Choose: ")
+			res, err := reader.ReadString('\n')
+			if err != nil {
+				Fail(fmt.Errorf("failed to read input: %w", err))
+			}
+			res = strings.TrimSpace(res)
+			if res == "n" || res == "N" {
+				fmt.Fprintf(os.Stderr, "Creating worktree '%s'...\n", wtName)
+				cfg, cfgErr := loadConfigForAdd(commander)
+				if cfgErr != nil {
+					Fail(cfgErr)
+				}
+				newPath := filepath.Join(cfg.Main, wtName)
+				if err := commander.WorktreeAdd(newPath, "HEAD"); err != nil {
+					Fail(fmt.Errorf("failed to create worktree: %w", err))
+				}
+				PrintPath(newPath)
+				return
+			}
+			if res == "q" || res == "Q" {
+				os.Exit(0)
+			}
+			var chosenIdx int
+			_, err = fmt.Sscanf(res, "%d", &chosenIdx)
+			if err == nil && chosenIdx > 0 && chosenIdx <= len(similar) {
+				PrintPath(similar[chosenIdx-1].AbsPath)
+				return
+			}
+		}
+		fmt.Fprintf(os.Stderr, "No similar worktrees found.\n")
+		fmt.Fprintf(os.Stderr, "  [n] Create new worktree '%s'\n", wtName)
+		fmt.Fprintf(os.Stderr, "  [q] Quit\n")
+		fmt.Fprint(os.Stderr, "Choose: ")
+		res, err := reader.ReadString('\n')
+		if err != nil {
+			Fail(fmt.Errorf("failed to read input: %w", err))
+		}
+		res = strings.TrimSpace(res)
+		if res == "n" || res == "N" {
+			cfg, cfgErr := loadConfigForAdd(commander)
+			if cfgErr != nil {
+				Fail(cfgErr)
+			}
+			newPath := filepath.Join(cfg.Main, wtName)
+			if err := commander.WorktreeAdd(newPath, "HEAD"); err != nil {
+				Fail(fmt.Errorf("failed to create worktree: %w", err))
+			}
+			PrintPath(newPath)
+			return
+		}
+		os.Exit(0)
 	}
 
 	worktrees, err := GetWorktreesSorted(commander)
