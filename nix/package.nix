@@ -27,7 +27,7 @@ buildGoModule (finalAttrs: {
       || base == "go.sum";
   };
 
-  vendorHash = "sha256-0nVmMIq+UocNPktI41rxmoisaObhGQloLeNzZdnG4bs=";
+  vendorHash = "sha256-SD0K8oMvs+bDPSBWD3j/NqEHeYm6LBIGmLk1ySC1kXw=";
 
   nativeBuildInputs = [ installShellFiles ];
 

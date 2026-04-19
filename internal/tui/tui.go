@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gdamore/tcell/v2"
+	"github.com/gdamore/tcell/v3"
 	"github.com/ktr0731/go-fuzzyfinder/matching"
 
 	"gwt/internal/git"
@@ -306,11 +306,16 @@ func SelectWorktreeTUI(
 	}
 
 	for {
-		ev := screen.PollEvent()
+		ev := <-screen.EventQ()
 
 		var keyEvent KeyEvent
 		if ev, ok := ev.(*tcell.EventKey); ok {
-			keyEvent = KeyEvent{Key: ev.Key(), Rune: ev.Rune()}
+			runes := []rune(ev.Str())
+			var r rune
+			if len(runes) > 0 {
+				r = runes[0]
+			}
+			keyEvent = KeyEvent{Key: ev.Key(), Rune: r}
 		}
 
 		var nextState State

@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"github.com/gdamore/tcell/v2"
+	"github.com/gdamore/tcell/v3"
 
 	"gwt/internal/app"
 	"gwt/internal/git"
