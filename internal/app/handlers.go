@@ -270,7 +270,7 @@ func RunJump(cmd *cobra.Command, args []string, commander git.Commander) {
 			for i, s := range similar {
 				fmt.Fprintf(os.Stderr, "  [%d] %s\n", i+1, s.Display)
 			}
-			fmt.Fprintf(os.Stderr, "  [n] Create new worktree '%s'\n", wtName)
+			fmt.Fprintf(os.Stderr, "  [Enter] Create new worktree '%s'\n", wtName)
 			fmt.Fprintf(os.Stderr, "  [q] Quit\n")
 			fmt.Fprint(os.Stderr, "Choose: ")
 			res, err := reader.ReadString('\n')
@@ -278,7 +278,7 @@ func RunJump(cmd *cobra.Command, args []string, commander git.Commander) {
 				Fail(fmt.Errorf("failed to read input: %w", err))
 			}
 			res = strings.TrimSpace(res)
-			if res == "n" || res == "N" {
+			if res == "" {
 				fmt.Fprintf(os.Stderr, "Creating worktree '%s'...\n", wtName)
 				cfg, cfgErr := loadConfigForAdd(commander)
 				if cfgErr != nil {
@@ -302,7 +302,7 @@ func RunJump(cmd *cobra.Command, args []string, commander git.Commander) {
 			}
 		}
 		fmt.Fprintf(os.Stderr, "No similar worktrees found.\n")
-		fmt.Fprintf(os.Stderr, "  [n] Create new worktree '%s'\n", wtName)
+		fmt.Fprintf(os.Stderr, "  [Enter] Create new worktree '%s'\n", wtName)
 		fmt.Fprintf(os.Stderr, "  [q] Quit\n")
 		fmt.Fprint(os.Stderr, "Choose: ")
 		res, err := reader.ReadString('\n')
@@ -310,7 +310,7 @@ func RunJump(cmd *cobra.Command, args []string, commander git.Commander) {
 			Fail(fmt.Errorf("failed to read input: %w", err))
 		}
 		res = strings.TrimSpace(res)
-		if res == "n" || res == "N" {
+		if res == "" {
 			cfg, cfgErr := loadConfigForAdd(commander)
 			if cfgErr != nil {
 				Fail(cfgErr)
