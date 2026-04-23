@@ -420,17 +420,16 @@ func RunAdd(cmd *cobra.Command, args []string, commander git.Commander) {
 	}
 
 	if err := commander.WorktreeAdd(newPath, branch); err != nil {
-		fmt.Fprintf(os.Stderr, "Branch not found. Create '%s'? [y/N] ", branch)
+		fmt.Fprintf(os.Stderr, "Branch not found. Create '%s'? [Y/n] ", branch)
 		res, err := reader.ReadString('\n')
 		if err != nil {
 			Fail(fmt.Errorf("failed to read input: %w", err))
 		}
-		if strings.EqualFold(strings.TrimSpace(res), "y") {
-			if err := commander.WorktreeAddNew(newPath, branch); err != nil {
-				Fail(fmt.Errorf("failed to create worktree: %w", err))
-			}
-		} else {
+		if strings.EqualFold(strings.TrimSpace(res), "n") {
 			os.Exit(1)
+		}
+		if err := commander.WorktreeAddNew(newPath, branch); err != nil {
+			Fail(fmt.Errorf("failed to create worktree: %w", err))
 		}
 	}
 	PrintPath(newPath)
